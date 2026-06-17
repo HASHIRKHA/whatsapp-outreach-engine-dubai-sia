@@ -14,13 +14,13 @@ import { getSocket } from '@/lib/socket';
 import QRCode from 'react-qr-code';
 import type { Session } from '@/types/api';
 
-function getWarmupCap(warmupDay: number): number {
+function getWarmupCap(warmupDay: number, dailyLimit = 200): number {
   if (warmupDay <= 2) return 10;
   if (warmupDay <= 5) return 25;
   if (warmupDay <= 9) return 50;
   if (warmupDay <= 13) return 100;
   if (warmupDay <= 20) return 150;
-  return 200;
+  return dailyLimit;
 }
 
 const fetcher = (url: string) => apiFetch<Session[]>(url);
@@ -95,7 +95,7 @@ const labelStyle: React.CSSProperties = {
 };
 
 /* ── Session Card ───────────────────────────────────────────── */
-function SessionCard({ session: s, onDisconnect, onDelete, onReconnect }: { session: Session; onDisconnect: () => void; onDelete: () => void; onReconnect: () => void }) {
+function SessionCard({ session: s, dailyLimit, onDisconnect, onDelete, onReconnect }: { session: Session; dailyLimit: number; onDisconnect: () => void; onDelete: () => void; onReconnect: () => void }) {
   const fp = s.fingerprint as { deviceModel?: string } | null;
   const isOnline = s.status === 'ONLINE';
 
@@ -142,7 +142,7 @@ function SessionCard({ session: s, onDisconnect, onDelete, onReconnect }: { sess
 
       {/* Daily usage */}
       {(() => {
-        const cap = getWarmupCap(s.warmupDay);
+        const cap = getWarmupCap(s.warmupDay, dailyLimit);
         return (
           <div style={{ marginBottom: 14 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>
@@ -220,6 +220,8 @@ function ModeCard({ value: _value, active, icon, title, desc, onClick }: { value
 /* ── Main content ───────────────────────────────────────────── */
 function SessionsContent() {
   const { data, isLoading, mutate } = useSWR<Session[]>('/sessions', fetcher, { refreshInterval: 5000 });
+  const { data: settings } = useSWR<{ dailyLimit: number }>('/settings', (url: string) => apiFetch<{ dailyLimit: number }>(url));
+  const dailyLimit = settings?.dailyLimit ?? 200;
   const { toast } = useToast();
   const [modalOpen, setModalOpen] = useState(false);
   const [step, setStep] = useState(1);
@@ -363,6 +365,7 @@ function SessionsContent() {
             <div key={s.id} className={`anim-${Math.min(i + 1, 6) as 1 | 2 | 3 | 4 | 5 | 6}`}>
               <SessionCard
                 session={s}
+                dailyLimit={dailyLimit}
                 onDisconnect={() => handleDisconnect(s.id)}
                 onDelete={() => handleDelete(s.id)}
                 onReconnect={() => handleReconnect(s.id)}
