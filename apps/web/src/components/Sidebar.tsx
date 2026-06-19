@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import useSWR from 'swr';
 import { apiFetch } from '@/lib/api';
+import { GlobalSearch } from './GlobalSearch';
 
 /* ── SVG icon set ───────────────────────────────────────────── */
 const Icons = {
@@ -107,6 +108,18 @@ interface DryRunResponse { dryRun: boolean }
 export function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
   const { data: dryRunData } = useSWR<DryRunResponse>(
     '/settings/dry-run',
     (url: string) => apiFetch<DryRunResponse>(url),
@@ -206,24 +219,31 @@ export function Sidebar() {
 
       {/* ── Search ───────────────────────────────────── */}
       {!collapsed && (
-        <div style={{
-          background: 'rgba(212,175,55,0.04)',
-          border: '1px solid rgba(212,175,55,0.1)',
-          borderRadius: 8,
-          height: 34,
-          display: 'flex',
-          alignItems: 'center',
-          padding: '0 10px',
-          gap: 8,
-          marginBottom: 22,
-          cursor: 'pointer',
-          transition: 'border-color 0.15s',
-        }}>
+        <div
+          onClick={() => setSearchOpen(true)}
+          style={{
+            background: 'rgba(212,175,55,0.04)',
+            border: '1px solid rgba(212,175,55,0.1)',
+            borderRadius: 8,
+            height: 34,
+            display: 'flex',
+            alignItems: 'center',
+            padding: '0 10px',
+            gap: 8,
+            marginBottom: 22,
+            cursor: 'pointer',
+            transition: 'border-color 0.15s',
+          }}
+          onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(212,175,55,0.25)')}
+          onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(212,175,55,0.1)')}
+        >
           <span style={{ color: 'rgba(212,175,55,0.35)', display: 'flex' }}>{Icons.search}</span>
           <span style={{ color: 'var(--text-muted)', fontSize: 12, flex: 1 }}>Search...</span>
           <span style={{ color: 'var(--text-muted)', fontSize: 10, fontFamily: 'monospace', background: 'rgba(255,255,255,0.04)', padding: '1px 4px', borderRadius: 4 }}>⌘K</span>
         </div>
       )}
+
+      <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
 
       {/* ── Navigation ───────────────────────────────── */}
       <NavSection label="MAIN" collapsed={collapsed}>

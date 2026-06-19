@@ -81,9 +81,9 @@ function CampaignsContent() {
 
   return (
     <DashLayout title="Campaigns" onRefresh={() => mutate()}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 10 }}>
         {/* Filter tabs */}
-        <div style={{ display: 'flex', gap: 4 }}>
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
           {STATUS_TABS.map((tab) => {
             const active = filter === tab.value;
             const accentColor = tab.color ?? '#888';
@@ -117,7 +117,7 @@ function CampaignsContent() {
       </div>
 
       {/* Table */}
-      <div className="glass" style={{ borderRadius: 14, overflow: 'hidden' }}>
+      <div className="glass" style={{ borderRadius: 14, overflow: 'hidden', overflowX: 'auto' }}>
         {isLoading ? (
           <div style={{ padding: '20px 22px' }}><SkeletonRows rows={5} cols={5} /></div>
         ) : campaigns.length === 0 ? (

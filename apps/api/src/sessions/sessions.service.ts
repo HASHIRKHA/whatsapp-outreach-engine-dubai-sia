@@ -32,6 +32,13 @@ export class SessionsService implements OnModuleInit, OnModuleDestroy {
   private readonly intentionalDisconnects = new Set<string>();
   private readonly startingSocket = new Set<string>(); // guard against concurrent startSocket calls
   private readonly reconnectDelays = new Map<string, number>(); // tracks per-session backoff delay (ms)
+  // WhatsApp's LID privacy namespace routes some chats under an anonymized @lid JID
+  // instead of the real @s.whatsapp.net phone JID. contacts.upsert carries both
+  // identities together when it fires, and sendBaileyMessage proactively resolves
+  // via onWhatsApp() too, so we cache lid-number -> E.164 phone here for
+  // messages.upsert/messages.update to resolve against.
+  private readonly lidToPhone = new Map<string, string>();
+  private readonly lidResolvedPhones = new Set<string>(); // avoids re-querying onWhatsApp per phone
   private readonly log = new Logger(SessionsService.name);
   private readonly encKey: Buffer;
   private readonly dryRun: boolean;
@@ -235,6 +242,9 @@ export class SessionsService implements OnModuleInit, OnModuleDestroy {
       getMessage: async () => undefined,
       // Suppress automatic "online" broadcast on connect — real phones only show online
       // when the user actively opens the app, not on every background reconnect.
+      // NOTE: this also means WhatsApp won't push delivered/read receipts (messages.update)
+      // for outbound messages to this connection — a deliberate anti-ban trade-off.
+      // Inbound replies are unaffected; message delivery isn't gated by presence the same way.
       markOnlineOnConnect: false,
       // Route all Baileys WebSocket + HTTP traffic through the assigned proxy (Layer 4)
       ...(proxyAgent ? { agent: proxyAgent, fetchAgent: proxyAgent } : {}),
@@ -269,6 +279,13 @@ export class SessionsService implements OnModuleInit, OnModuleDestroy {
           this.log.error(`contacts sync error [${sessionId}]: ${String(err)}`),
         );
       }
+      for (const c of baileysContacts) {
+        if (c.lid && c.id?.endsWith('@s.whatsapp.net')) {
+          const lidNumber = c.lid.replace('@lid', '').split(':')[0]!;
+          const phone = '+' + c.id.replace('@s.whatsapp.net', '').split(':')[0]!.replace(/\D/g, '');
+          this.lidToPhone.set(lidNumber, phone);
+        }
+      }
     });
 
     sock.ev.on('messages.upsert', ({ messages: inbound, type }) => {
@@ -277,18 +294,20 @@ export class SessionsService implements OnModuleInit, OnModuleDestroy {
         // Skip messages we sent ourselves
         if (msg.key.fromMe) continue;
         const jid = msg.key.remoteJid;
-        if (!jid || !jid.endsWith('@s.whatsapp.net')) continue;
-        // Strip device suffix (:15) that appears in multi-device JIDs
-        const rawPhone = jid.replace('@s.whatsapp.net', '').split(':')[0]!;
-        const phone = rawPhone.startsWith('+') ? rawPhone : `+${rawPhone}`;
         const text =
           msg.message?.conversation ??
           msg.message?.extendedTextMessage?.text ??
           null;
         if (!text) continue;
-        void this.handleInboundMessage(sessionId, phone, text).catch((err: unknown) =>
-          this.log.error(`inbound message error [${sessionId}]: ${String(err)}`),
-        );
+        void this.resolveOrInferPhone(sessionId, jid)
+          .then((phone) => {
+            if (!phone) {
+              this.log.debug(`[${sessionId}] inbound from unresolvable jid=${jid} — skipping`);
+              return;
+            }
+            return this.handleInboundMessage(sessionId, phone, text);
+          })
+          .catch((err: unknown) => this.log.error(`inbound message error [${sessionId}]: ${String(err)}`));
       }
     });
 
@@ -298,21 +317,80 @@ export class SessionsService implements OnModuleInit, OnModuleDestroy {
         if (!key.fromMe) continue;
         const status = (update as { status?: number }).status;
         if (status !== 3 && status !== 4) continue; // 3=DELIVERED, 4=READ
-        const jid = key.remoteJid;
-        if (!jid?.endsWith('@s.whatsapp.net')) continue;
-        const rawPhone = jid.replace('@s.whatsapp.net', '').split(':')[0]!;
-        const phone = rawPhone.startsWith('+') ? rawPhone : `+${rawPhone}`;
-        if (status === 3) {
-          void this.handleMessageDelivered(sessionId, phone).catch((err: unknown) =>
-            this.log.error(`delivered-receipt error [${sessionId}]: ${String(err)}`),
-          );
-        } else {
-          void this.handleMessageRead(sessionId, phone).catch((err: unknown) =>
-            this.log.error(`read-receipt error [${sessionId}]: ${String(err)}`),
-          );
-        }
+        void this.resolveOrInferPhone(sessionId, key.remoteJid)
+          .then((phone) => {
+            if (!phone) return;
+            return status === 3
+              ? this.handleMessageDelivered(sessionId, phone)
+              : this.handleMessageRead(sessionId, phone);
+          })
+          .catch((err: unknown) => this.log.error(`receipt error [${sessionId}]: ${String(err)}`));
       }
     });
+  }
+
+  /**
+   * Looks up the JID WhatsApp actually routes this phone under, once per phone, so a
+   * reply arriving on an @lid JID can be mapped back to the contact later. Best-effort —
+   * a failed lookup must never block the send itself.
+   */
+  private async ensureLidResolved(
+    sock: ReturnType<typeof makeWASocket>,
+    phone: string,
+  ): Promise<void> {
+    if (this.lidResolvedPhones.has(phone)) return;
+    this.lidResolvedPhones.add(phone);
+    try {
+      const results = await sock.onWhatsApp(phone);
+      const jid = results?.[0]?.jid;
+      if (jid?.endsWith('@lid')) {
+        const lidNumber = jid.replace('@lid', '').split(':')[0]!;
+        this.lidToPhone.set(lidNumber, phone);
+      }
+    } catch (err: unknown) {
+      this.log.debug(`onWhatsApp lookup failed for ${phone}: ${String(err)}`);
+    }
+  }
+
+  /**
+   * Resolves an inbound JID to a phone, falling back to the most recently sent
+   * message on this session when the JID is an @lid we have no mapping for yet
+   * (onWhatsApp's USync lookup resolves a different identity than the one some
+   * accounts actually message under — same best-effort heuristic already used
+   * for delivery/read receipts). Learns the mapping for next time on success.
+   */
+  private async resolveOrInferPhone(
+    sessionId: string,
+    jid: string | null | undefined,
+  ): Promise<string | null> {
+    const direct = this.resolvePhoneFromJid(jid);
+    if (direct) return direct;
+    if (!jid?.endsWith('@lid')) return null;
+
+    const lastSent = await this.prisma.campaignMessage.findFirst({
+      where: { sessionId, status: { in: [MsgStatus.SENT, MsgStatus.DELIVERED, MsgStatus.READ] } },
+      orderBy: { sentAt: 'desc' },
+      include: { contact: true },
+    });
+    if (!lastSent) return null;
+
+    const lidNumber = jid.replace('@lid', '').split(':')[0]!;
+    this.lidToPhone.set(lidNumber, lastSent.contact.phone);
+    return lastSent.contact.phone;
+  }
+
+  /** Resolves an @s.whatsapp.net or @lid JID to an E.164 phone, or null if unresolvable. */
+  private resolvePhoneFromJid(jid: string | null | undefined): string | null {
+    if (!jid) return null;
+    if (jid.endsWith('@s.whatsapp.net')) {
+      const rawPhone = jid.replace('@s.whatsapp.net', '').split(':')[0]!;
+      return rawPhone.startsWith('+') ? rawPhone : `+${rawPhone}`;
+    }
+    if (jid.endsWith('@lid')) {
+      const lidNumber = jid.replace('@lid', '').split(':')[0]!;
+      return this.lidToPhone.get(lidNumber) ?? null;
+    }
+    return null;
   }
 
   private async handleInboundMessage(
@@ -522,6 +600,7 @@ export class SessionsService implements OnModuleInit, OnModuleDestroy {
     if (!sock) {
       throw new Error(`Session ${sessionId} socket is not active`);
     }
+    await this.ensureLidResolved(sock, phone);
     const jid = `${phone.replace(/\D/g, '')}@s.whatsapp.net`;
     // WhatsApp hard limits — silently truncate rather than throw and lose the message.
     // Media captions are capped tighter (1024) than standalone text messages (4096).

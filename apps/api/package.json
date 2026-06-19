@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "build": "nest build",
-    "dev": "nest start --watch",
+    "dev": "nest start --watch -N --max-old-space-size=4096",
     "start": "node dist/main",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint src --ext .ts --ignore-pattern \"**/*.spec.ts\" --max-warnings 0",

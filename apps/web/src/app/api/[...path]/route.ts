@@ -40,12 +40,20 @@ async function proxy(req: NextRequest, { params }: { params: Promise<{ path: str
     }
   }
 
-  const upstream = await fetch(url, {
-    method,
-    headers,
-    body,
-    redirect: 'manual',
-  });
+  let upstream: Response;
+  try {
+    upstream = await fetch(url, {
+      method,
+      headers,
+      body,
+      redirect: 'manual',
+    });
+  } catch {
+    return NextResponse.json(
+      { message: 'API server is unreachable. The backend may still be starting up — please try again in a moment.' },
+      { status: 503 },
+    );
+  }
 
   const responseHeaders: Record<string, string> = {
     'Content-Type': upstream.headers.get('Content-Type') ?? 'application/json',

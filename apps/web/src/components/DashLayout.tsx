@@ -19,14 +19,16 @@ export function DashLayout({ title, children, onRefresh }: DashLayoutProps) {
         <div
           style={{
             flex: 1,
+            minWidth: 0,
             marginLeft: 220,
             display: 'flex',
             flexDirection: 'column',
             minHeight: '100vh',
+            overflow: 'hidden',
           }}
         >
           <Header title={title} onRefresh={onRefresh} />
-          <main style={{ flex: 1, padding: 24, overflowY: 'auto' }}>{children}</main>
+          <main style={{ flex: 1, padding: 24, overflowY: 'auto', overflowX: 'hidden' }}>{children}</main>
         </div>
       </div>
     </ToastProvider>

@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { useRouter } from 'next/navigation';
 
 interface HeaderProps {
   title: string;
@@ -22,6 +23,7 @@ const IconBell = () => (
 );
 
 export function Header({ title, onRefresh }: HeaderProps) {
+  const router = useRouter();
   return (
     <header
       style={{
@@ -53,7 +55,7 @@ export function Header({ title, onRefresh }: HeaderProps) {
             <IconRefresh />
           </button>
         )}
-        <button title="Notifications" style={iconBtnStyle}>
+        <button title="Notifications" onClick={() => router.push('/replies')} style={iconBtnStyle}>
           <IconBell />
         </button>
       </div>

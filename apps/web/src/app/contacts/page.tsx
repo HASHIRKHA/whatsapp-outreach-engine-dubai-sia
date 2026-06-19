@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import useSWR from 'swr';
 import * as XLSX from 'xlsx';
 import { DashLayout } from '@/components/DashLayout';
@@ -640,7 +641,8 @@ interface ContactsPageData {
 }
 
 function ContactsContent() {
-  const [search, setSearch] = useState('');
+  const searchParams = useSearchParams();
+  const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [validFilter, setValidFilter] = useState<'ALL' | 'VALID' | 'INVALID'>('ALL');
   const [tempFilter, setTempFilter] = useState<TempFilter>('ALL');
   const [activeSmartListId, setActiveSmartListId] = useState<string | null>(null);
@@ -1030,7 +1032,9 @@ const tdStyle: React.CSSProperties = { padding: '9px 12px', verticalAlign: 'midd
 export default function ContactsPage() {
   return (
     <ToastProvider>
-      <ContactsContent />
+      <Suspense fallback={null}>
+        <ContactsContent />
+      </Suspense>
     </ToastProvider>
   );
 }

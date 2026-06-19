@@ -9,7 +9,7 @@ export function getSocket(): Socket {
   if (!socket) {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
     socket = io(apiUrl, {
-      transports: ['websocket'],
+      transports: ['polling', 'websocket'],
       reconnectionDelay: 2000,
       reconnectionDelayMax: 30_000,
       reconnectionAttempts: Infinity,
