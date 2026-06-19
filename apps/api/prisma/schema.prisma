@@ -11,6 +11,18 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+// ─── Panel auth ──────────────────────────────────────────────────────────────
+// Credentials are managed directly in Supabase — no registration endpoint.
+
+model PanelUser {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("panel_users")
+}
+
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
 enum SessionMode {

@@ -18,6 +18,7 @@ import { RepliesModule } from './replies/replies.module';
 import { HealthModule } from './health/health.module';
 import { SmartListsModule } from './smart-lists/smart-lists.module';
 import { MediaModule } from './media/media.module';
+import { AuthModule } from './auth/auth.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 
 @Module({
@@ -39,6 +40,7 @@ import { AllExceptionsFilter } from './common/filters/http-exception.filter';
     HealthModule,
     SmartListsModule,
     MediaModule,
+    AuthModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

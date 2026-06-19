@@ -1,56 +1,43 @@
 /**
- * Seeds a single admin user from environment variables.
- * Idempotent — skips if the email already exists.
+ * Creates or updates a panel_users row from environment variables.
+ * Run this once to set up credentials, then manage them directly in Supabase.
  *
- * Run:
- *   SEED_ADMIN_EMAIL=admin@example.com SEED_ADMIN_PASSWORD=secret123 \
+ * Usage:
+ *   SEED_USERNAME=admin SEED_PASSWORD=yourpassword \
  *     npx ts-node -r tsconfig-paths/register scripts/seed-admin.ts
- *
- * Or with .env loaded:
- *   npx dotenv -e .env -- npx ts-node scripts/seed-admin.ts
  */
 
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
-async function seedAdmin(): Promise<void> {
-  const email = process.env.SEED_ADMIN_EMAIL;
-  const password = process.env.SEED_ADMIN_PASSWORD;
+async function main(): Promise<void> {
+  const username = process.env.SEED_USERNAME;
+  const password = process.env.SEED_PASSWORD;
 
-  if (!email || !password) {
-    console.error('ERROR: SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD must be set.');
+  if (!username || !password) {
+    console.error('ERROR: SEED_USERNAME and SEED_PASSWORD must be set.');
     process.exit(1);
   }
-
   if (password.length < 8) {
-    console.error('ERROR: SEED_ADMIN_PASSWORD must be at least 8 characters.');
+    console.error('ERROR: SEED_PASSWORD must be at least 8 characters.');
     process.exit(1);
   }
 
-  const prisma = new PrismaClient({
-    datasources: { db: { url: process.env.DATABASE_URL } },
-  });
-
+  const prisma = new PrismaClient();
   try {
-    const existing = await prisma.user.findUnique({ where: { email } });
-
-    if (existing) {
-      console.log(`Already exists: ${email}`);
-      return;
-    }
-
-    const passwordHash = await bcrypt.hash(password, 10);
-    await prisma.user.create({
-      data: { email, passwordHash, role: 'ADMIN' },
+    const passwordHash = await bcrypt.hash(password, 12);
+    await prisma.panelUser.upsert({
+      where: { username },
+      update: { passwordHash },
+      create: { username, passwordHash },
     });
-
-    console.log(`Admin created: ${email}`);
+    console.log(`✓ Panel user "${username}" saved.`);
   } finally {
     await prisma.$disconnect();
   }
 }
 
-seedAdmin().catch((err: unknown) => {
-  console.error('Seed failed:', err);
+main().catch((err: unknown) => {
+  console.error('Failed:', err);
   process.exit(1);
 });

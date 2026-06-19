@@ -12,6 +12,7 @@
   "dependencies": {
     "@wa-engine/shared": "workspace:*",
     "date-fns": "^4.4.0",
+    "jose": "^6.2.3",
     "next": "^15.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

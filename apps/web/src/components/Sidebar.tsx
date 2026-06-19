@@ -265,6 +265,50 @@ export function Sidebar() {
 
       <div style={{ flex: 1 }} />
 
+      {/* ── Logout ───────────────────────────────────── */}
+      <button
+        onClick={() => {
+          document.cookie = 'session=; path=/; max-age=0; SameSite=Lax';
+          window.location.href = '/login';
+        }}
+        title="Sign out"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          padding: collapsed ? '9px 0' : '8px 10px',
+          justifyContent: collapsed ? 'center' : 'flex-start',
+          borderRadius: 7,
+          background: 'transparent',
+          border: '1px solid transparent',
+          color: 'var(--text-muted)',
+          fontSize: 13,
+          cursor: 'pointer',
+          width: '100%',
+          marginBottom: 8,
+          transition: 'all 0.15s',
+        }}
+        onMouseEnter={e => {
+          e.currentTarget.style.background = 'rgba(239,68,68,0.07)';
+          e.currentTarget.style.borderColor = 'rgba(239,68,68,0.15)';
+          e.currentTarget.style.color = '#ef4444';
+        }}
+        onMouseLeave={e => {
+          e.currentTarget.style.background = 'transparent';
+          e.currentTarget.style.borderColor = 'transparent';
+          e.currentTarget.style.color = 'var(--text-muted)';
+        }}
+      >
+        <span style={{ display: 'flex', flexShrink: 0 }}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+            <polyline points="16 17 21 12 16 7"/>
+            <line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+        </span>
+        {!collapsed && 'Sign out'}
+      </button>
+
       {/* ── Mode indicator ───────────────────────────── */}
       <div style={{
         background: 'rgba(212,175,55,0.03)',
