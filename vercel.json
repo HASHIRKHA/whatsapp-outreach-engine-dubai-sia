@@ -1,6 +1,5 @@
 {
   "installCommand": "npx pnpm@9 install --frozen-lockfile",
   "buildCommand": "npx pnpm@9 --filter @wa-engine/shared build && npx pnpm@9 --filter @wa-engine/web build",
-  "outputDirectory": "apps/web/.next",
-  "framework": "nextjs"
+  "outputDirectory": "apps/web/.next"
 }
