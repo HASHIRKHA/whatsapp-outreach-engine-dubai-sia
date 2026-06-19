@@ -1,6 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { getQueueToken } from '@nestjs/bullmq';
-import type { Job } from 'bullmq';
+import { DelayedError, type Job } from 'bullmq';
 import { MediaType, MsgStatus, SessionStatus } from '@prisma/client';
 import { CloudApiWorker } from './cloud-api.worker';
 import { PrismaService } from '../common/prisma/prisma.service';
@@ -98,6 +98,13 @@ describe('CloudApiWorker', () => {
       warmupDay: 21,
       status: SessionStatus.ONLINE,
     });
+    mockPrisma.campaignMessage.count.mockResolvedValue(0);
+    // jest.clearAllMocks() resets call history but NOT configured mockReturnValue —
+    // re-pin every gate to its open/default state so tests can't leak into each other.
+    mockDelay.isWithinActiveHours.mockReturnValue(true);
+    mockDelay.msUntilNextWindow.mockReturnValue(3_600_000);
+    mockDelay.msUntilMidnight.mockReturnValue(3_600_000);
+    mockWarmup.getEffectiveDailyLimit.mockReturnValue(200);
     mockCloudApi.sendTemplate.mockResolvedValue({ wamid: 'wamid.test' });
     mockRedis.get.mockResolvedValue(null);
 
@@ -126,6 +133,106 @@ describe('CloudApiWorker', () => {
         expect(mockCloudApi.sendTemplate).not.toHaveBeenCalled();
       },
     );
+  });
+
+  describe('requeue gates', () => {
+    const FIXED_NOW = 1_750_000_000_000;
+
+    beforeEach(() => {
+      jest.spyOn(Date, 'now').mockReturnValue(FIXED_NOW);
+    });
+
+    afterEach(() => {
+      jest.spyOn(Date, 'now').mockRestore();
+    });
+
+    it('requeues 5 minutes out and never sends when the campaign is PAUSED', async () => {
+      mockPrisma.campaign.findUnique.mockResolvedValue({ status: 'PAUSED' });
+      const job = makeJob(makeJobData());
+
+      await expect(worker.process(job)).rejects.toBeInstanceOf(DelayedError);
+
+      expect(job.moveToDelayed).toHaveBeenCalledWith(FIXED_NOW + 300_000, undefined);
+      expect(mockCloudApi.sendTemplate).not.toHaveBeenCalled();
+    });
+
+    it('requeues to the next active-hours window and never sends when outside active hours', async () => {
+      mockDelay.isWithinActiveHours.mockReturnValue(false);
+      mockDelay.msUntilNextWindow.mockReturnValue(7_200_000);
+      const job = makeJob(makeJobData({ activeFrom: 8, activeTo: 22 }));
+
+      await expect(worker.process(job)).rejects.toBeInstanceOf(DelayedError);
+
+      expect(mockDelay.isWithinActiveHours).toHaveBeenCalledWith(8, 22);
+      expect(mockDelay.msUntilNextWindow).toHaveBeenCalledWith(8);
+      expect(job.moveToDelayed).toHaveBeenCalledWith(FIXED_NOW + 7_200_000, undefined);
+      expect(mockCloudApi.sendTemplate).not.toHaveBeenCalled();
+    });
+
+    it('requeues to the midnight reset and never sends when the session is at its daily cap', async () => {
+      mockPrisma.session.findUnique.mockResolvedValue({ dailySent: 200, warmupDay: 21, status: SessionStatus.ONLINE });
+      mockWarmup.getEffectiveDailyLimit.mockReturnValue(200);
+      mockDelay.msUntilMidnight.mockReturnValue(5_400_000);
+      const job = makeJob(makeJobData());
+
+      await expect(worker.process(job)).rejects.toBeInstanceOf(DelayedError);
+
+      expect(job.moveToDelayed).toHaveBeenCalledWith(FIXED_NOW + 5_400_000, undefined);
+      expect(mockCloudApi.sendTemplate).not.toHaveBeenCalled();
+    });
+
+    it('does NOT requeue when dailySent is one below the cap (boundary check)', async () => {
+      mockPrisma.session.findUnique.mockResolvedValue({ dailySent: 199, warmupDay: 21, status: SessionStatus.ONLINE });
+      mockWarmup.getEffectiveDailyLimit.mockReturnValue(200);
+
+      await worker.process(makeJob(makeJobData()));
+
+      expect(mockCloudApi.sendTemplate).toHaveBeenCalledTimes(1);
+    });
+
+    describe('Redis min-gap gate (anti-ban stranger multiplier)', () => {
+      it.each([
+        [0, 2.5],
+        [1, 1.8],
+        [2, 1.0],
+      ])('uses a %sx gap multiplier when the contact has %i prior sent message(s)', async (prevSentCount, multiplier) => {
+        mockPrisma.campaignMessage.count.mockResolvedValue(prevSentCount);
+        const lastSent = FIXED_NOW - 1_000; // 1s ago — well within any of these gaps
+        mockRedis.get.mockResolvedValue(String(lastSent));
+        const job = makeJob(makeJobData());
+
+        await expect(worker.process(job)).rejects.toBeInstanceOf(DelayedError);
+
+        const expectedMinGap = Math.round(60_000 * multiplier);
+        const expectedWait = expectedMinGap - 1_000 + 1_000; // elapsed=1000ms
+        expect(job.moveToDelayed).toHaveBeenCalledWith(FIXED_NOW + expectedWait, undefined);
+        expect(mockCloudApi.sendTemplate).not.toHaveBeenCalled();
+      });
+
+      it('proceeds to send when there is no prior lastSent record on this session', async () => {
+        mockPrisma.campaignMessage.count.mockResolvedValue(0);
+        mockRedis.get.mockResolvedValue(null);
+
+        await worker.process(makeJob(makeJobData()));
+
+        expect(mockCloudApi.sendTemplate).toHaveBeenCalledTimes(1);
+      });
+
+      it('proceeds to send once the elapsed time exactly meets the minimum gap', async () => {
+        mockPrisma.campaignMessage.count.mockResolvedValue(0); // 2.5x multiplier -> minGap = 150_000
+        mockRedis.get.mockResolvedValue(String(FIXED_NOW - 150_000));
+
+        await worker.process(makeJob(makeJobData()));
+
+        expect(mockCloudApi.sendTemplate).toHaveBeenCalledTimes(1);
+      });
+
+      it('records the lastSent timestamp in Redis with a 24h expiry after a successful send', async () => {
+        await worker.process(makeJob(makeJobData()));
+
+        expect(mockRedis.set).toHaveBeenCalledWith('session:lastSent:session-1', String(FIXED_NOW), 'EX', 86400);
+      });
+    });
   });
 
   describe('missing templateName guard', () => {
