@@ -21,7 +21,21 @@ export class TemplatesService {
     return t;
   }
 
+  async update(id: string, dto: Partial<CreateTemplateDto>): Promise<Template> {
+    try {
+      return await this.prisma.template.update({ where: { id }, data: dto });
+    } catch (e) {
+      if ((e as { code?: string }).code === 'P2025') throw new NotFoundException(`Template ${id} not found`);
+      throw e;
+    }
+  }
+
   async delete(id: string): Promise<void> {
-    await this.prisma.template.delete({ where: { id } });
+    try {
+      await this.prisma.template.delete({ where: { id } });
+    } catch (e) {
+      if ((e as { code?: string }).code === 'P2025') throw new NotFoundException(`Template ${id} not found`);
+      throw e;
+    }
   }
 }

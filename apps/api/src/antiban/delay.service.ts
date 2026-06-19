@@ -48,6 +48,15 @@ export class DelayService {
     return hour >= activeFrom || hour < activeTo;
   }
 
+  msUntilMidnight(): number {
+    const now = new Date();
+    const midnight = new Date(now);
+    midnight.setDate(midnight.getDate() + 1);
+    midnight.setHours(0, 0, 0, 0);
+    // Clamp to at least 60 s so the job isn't immediately re-picked
+    return Math.max(midnight.getTime() - now.getTime(), 60_000);
+  }
+
   msUntilNextWindow(activeFrom: number): number {
     const now = new Date();
     const dtf = new Intl.DateTimeFormat('en-US', {

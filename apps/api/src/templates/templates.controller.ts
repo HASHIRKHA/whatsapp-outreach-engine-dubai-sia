@@ -1,7 +1,28 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post } from '@nestjs/common';
+import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import type { Template } from '@prisma/client';
 import { TemplatesService } from './templates.service';
 import { CreateTemplateDto } from './dto/create-template.dto';
+
+class UpdateTemplateDto {
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  body?: string;
+
+  @IsOptional()
+  @IsString()
+  mediaUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  category?: string;
+}
 
 @Controller('templates')
 export class TemplatesController {
@@ -20,6 +41,14 @@ export class TemplatesController {
   @Get(':id')
   async findOne(@Param('id') id: string): Promise<Template> {
     return this.templates.findOne(id);
+  }
+
+  @Patch(':id')
+  async update(
+    @Param('id') id: string,
+    @Body() dto: UpdateTemplateDto,
+  ): Promise<Template> {
+    return this.templates.update(id, dto);
   }
 
   @Delete(':id')

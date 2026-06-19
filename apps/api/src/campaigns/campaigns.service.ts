@@ -1,5 +1,4 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import {
   type Campaign,
   CampaignStatus,
@@ -15,6 +14,13 @@ import { OutboxProducer } from '../queue/outbox.producer';
 import { SmartListsService } from '../smart-lists/smart-lists.service';
 import { type CreateCampaignDto } from './dto/create-campaign.dto';
 import { type LaunchCampaignDto } from './dto/launch-campaign.dto';
+
+function mapP2025(id: string, label: string): (e: unknown) => never {
+  return (e: unknown) => {
+    if ((e as { code?: string }).code === 'P2025') throw new NotFoundException(`${label} ${id} not found`);
+    throw e;
+  };
+}
 
 export interface CampaignStats {
   status: CampaignStatus;
@@ -37,7 +43,6 @@ export class CampaignsService {
     private readonly warmup: WarmupService,
     private readonly producer: OutboxProducer,
     private readonly smartLists: SmartListsService,
-    _config: ConfigService,
   ) {}
 
   async create(dto: CreateCampaignDto): Promise<Campaign> {
@@ -61,12 +66,12 @@ export class CampaignsService {
   }
 
   async findOne(id: string): Promise<Campaign> {
-    return this.prisma.campaign.findUniqueOrThrow({ where: { id } });
+    return this.prisma.campaign.findUniqueOrThrow({ where: { id } }).catch(mapP2025(id, 'Campaign'));
   }
 
   async delete(id: string): Promise<void> {
     await this.prisma.campaignMessage.deleteMany({ where: { campaignId: id } });
-    await this.prisma.campaign.delete({ where: { id } });
+    await this.prisma.campaign.delete({ where: { id } }).catch(mapP2025(id, 'Campaign'));
   }
 
   /**
@@ -77,7 +82,7 @@ export class CampaignsService {
    * Auto-pauses immediately if no sessions have remaining capacity.
    */
   async launch(id: string, dto: LaunchCampaignDto): Promise<void> {
-    const campaign = await this.prisma.campaign.findUniqueOrThrow({ where: { id } });
+    const campaign = await this.prisma.campaign.findUniqueOrThrow({ where: { id } }).catch(mapP2025(id, 'Campaign'));
 
     if (
       campaign.status !== CampaignStatus.DRAFT &&
@@ -250,14 +255,16 @@ export class CampaignsService {
   }
 
   async pause(id: string): Promise<void> {
-    await this.prisma.campaign.update({
-      where: { id },
-      data: { status: CampaignStatus.PAUSED },
-    });
+    try {
+      await this.prisma.campaign.update({
+        where: { id },
+        data: { status: CampaignStatus.PAUSED },
+      });
+    } catch (e) { mapP2025(id, 'Campaign')(e); }
   }
 
   async resume(id: string): Promise<void> {
-    const campaign = await this.prisma.campaign.findUniqueOrThrow({ where: { id } });
+    const campaign = await this.prisma.campaign.findUniqueOrThrow({ where: { id } }).catch(mapP2025(id, 'Campaign'));
     if (campaign.status !== CampaignStatus.PAUSED) {
       throw new BadRequestException(
         `Campaign must be PAUSED to resume (current: ${campaign.status})`,
@@ -271,10 +278,12 @@ export class CampaignsService {
   }
 
   async getMessages(id: string, take: number): Promise<unknown[]> {
+    await this.prisma.campaign.findUniqueOrThrow({ where: { id } }).catch(mapP2025(id, 'Campaign'));
+    const safeTake = Math.min(isNaN(take) ? 20 : take, 200);
     const rows = await this.prisma.campaignMessage.findMany({
       where: { campaignId: id },
       orderBy: { id: 'desc' },
-      take,
+      take: safeTake,
       include: { contact: { select: { phone: true, name: true } } },
     });
     return rows.map(({ contact, ...msg }) => ({
@@ -285,7 +294,7 @@ export class CampaignsService {
   }
 
   async getStats(id: string): Promise<CampaignStats> {
-    const campaign = await this.prisma.campaign.findUniqueOrThrow({ where: { id } });
+    const campaign = await this.prisma.campaign.findUniqueOrThrow({ where: { id } }).catch(mapP2025(id, 'Campaign'));
 
     const rows = await this.prisma.campaignMessage.groupBy({
       by: ['status'],

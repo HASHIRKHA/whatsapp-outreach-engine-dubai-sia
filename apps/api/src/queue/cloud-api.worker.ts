@@ -34,7 +34,7 @@ export class CloudApiWorker extends WorkerHost {
       where: { id: job.data.campaignMessageId },
       select: { status: true },
     });
-    const TERMINAL: MsgStatus[] = [MsgStatus.SENT, MsgStatus.DELIVERED, MsgStatus.READ, MsgStatus.REPLIED];
+    const TERMINAL: MsgStatus[] = [MsgStatus.SENT, MsgStatus.DELIVERED, MsgStatus.READ, MsgStatus.REPLIED, MsgStatus.FAILED];
     if (!current || TERMINAL.includes(current.status)) {
       this.log.log(
         `[CLOUD_API] job ${job.id} already sent (status=${current?.status ?? 'missing'}) — skipping`,
@@ -75,7 +75,7 @@ export class CloudApiWorker extends WorkerHost {
     }
     const cap = this.warmup.getEffectiveDailyLimit(session);
     if (session.dailySent >= cap) {
-      const msUntilReset = this.delay.msUntilNextWindow(0); // requeue after midnight — resetDailySent cron runs at 00:00
+      const msUntilReset = this.delay.msUntilMidnight(); // requeue after midnight reset cron (00:00)
       this.log.warn(
         `[CLOUD_API] session ${job.data.sessionId} hit daily cap (${session.dailySent}/${cap}) → requeue in ${Math.round(msUntilReset / 60_000)}min`,
       );
@@ -151,6 +151,8 @@ export class CloudApiWorker extends WorkerHost {
   @OnWorkerEvent('failed')
   async onFailed(job: Job<OutboxJob> | undefined, error: Error): Promise<void> {
     if (!job) return;
+    // DelayedError is an intentional requeue signal — never route to DLQ
+    if (error instanceof DelayedError) return;
     const maxAttempts = job.opts.attempts ?? 1;
     if (job.attemptsMade >= maxAttempts) {
       const dlqPayload: DlqJob = {
@@ -184,7 +186,8 @@ export class CloudApiWorker extends WorkerHost {
         where: { campaignId, status: MsgStatus.QUEUED },
       });
       if (remaining === 0) {
-        await this.prisma.campaign.update({
+        // updateMany is safe to call concurrently — won't throw if already DONE
+        await this.prisma.campaign.updateMany({
           where: { id: campaignId, status: CampaignStatus.RUNNING },
           data: { status: CampaignStatus.DONE },
         });

@@ -143,14 +143,16 @@ export class AiService {
     const sessionDelays = new Map<string, number>();
     for (const s of sessions) sessionDelays.set(s.id, 0);
 
-    // Dedup: skip contacts already queued / sent for this campaign
+    // Dedup: skip contacts that are still QUEUED for this campaign (not yet sent).
+    // Only exclude QUEUED — contacts with SENT/DELIVERED/READ/REPLIED can still receive
+    // follow-up messages if the operator re-runs the AI campaign.
     const alreadyQueued = new Set(
       (
         await this.prisma.campaignMessage.findMany({
           where: {
             campaignId,
             contactId: { in: messages.map((m) => m.contactId) },
-            status: { not: 'FAILED' },
+            status: MsgStatus.QUEUED,
           },
           select: { contactId: true },
         })
@@ -212,6 +214,10 @@ export class AiService {
           activeTo: campaign.activeTo,
           mode: campaign.mode as SessionMode,
           templateName,
+          mediaUrl: campaign.mediaUrl ?? undefined,
+          mediaType: campaign.mediaType ?? undefined,
+          mediaMimeType: campaign.mediaMimeType ?? undefined,
+          mediaFilename: campaign.mediaFilename ?? undefined,
         },
         { delay: totalDelay },
       );

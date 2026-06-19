@@ -23,6 +23,7 @@ const mockPrisma = {
 
 const mockGateway = {
   emitCampaignStats: jest.fn(),
+  emitReply: jest.fn(),
 };
 
 function makeStatusPayload(
@@ -113,13 +114,17 @@ describe('WebhooksService', () => {
       ['read', MsgStatus.READ],
       ['sent', MsgStatus.SENT],
       ['failed', MsgStatus.FAILED],
-    ])('maps "%s" → MsgStatus.%s', async (rawStatus, expected) => {
+    ])('maps "%s" → MsgStatus.%s and only promotes (rank guard)', async (rawStatus, expected) => {
       mockPrisma.campaignMessage.updateMany.mockResolvedValue({ count: 1 });
       await service.processCloudApiPayload(makeStatusPayload(rawStatus));
-      expect(mockPrisma.campaignMessage.updateMany).toHaveBeenCalledWith({
-        where: { wamid: 'wamid.test123' },
-        data: { status: expected },
-      });
+      // The where clause now includes a rank guard (status: { in: [...lower statuses] })
+      // to prevent out-of-order Meta events from downgrading message status.
+      expect(mockPrisma.campaignMessage.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ wamid: 'wamid.test123', status: expect.objectContaining({ in: expect.any(Array) }) }),
+          data: { status: expected },
+        }),
+      );
     });
 
     it('warns when wamid is unknown (count 0)', async () => {

@@ -252,7 +252,8 @@ export class SessionsService implements OnModuleInit, OnModuleDestroy {
       const toSync = baileysContacts
         .filter((c) => c.id && c.id.endsWith('@s.whatsapp.net'))
         .map((c) => ({
-          phone: '+' + c.id.replace('@s.whatsapp.net', '').replace(/\D/g, ''),
+          // Strip device suffix (:15) before stripping non-digits — same as messages.upsert handler
+          phone: '+' + c.id.replace('@s.whatsapp.net', '').split(':')[0]!.replace(/\D/g, ''),
           name: c.name ?? c.notify ?? undefined,
         }));
       if (toSync.length > 0) {

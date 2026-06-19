@@ -341,7 +341,7 @@ function NotesModal({ contact, onClose, onSaved }: { contact: Contact; onClose: 
   const save = async () => {
     setLoading(true);
     try {
-      await apiFetch(`/contacts/${contact.id}`, { method: 'PATCH', body: JSON.stringify({ phone: contact.phone, notes }) });
+      await apiFetch(`/contacts/${contact.id}`, { method: 'PATCH', body: JSON.stringify({ notes }) });
       toast('Notes saved', 'success');
       onSaved();
       onClose();
@@ -755,7 +755,7 @@ function ContactsContent() {
 
   const handleTempChange = async (contact: Contact, leadTemp: LeadTemp) => {
     try {
-      await apiFetch(`/contacts/${contact.id}`, { method: 'PATCH', body: JSON.stringify({ phone: contact.phone, leadTemp }) });
+      await apiFetch(`/contacts/${contact.id}`, { method: 'PATCH', body: JSON.stringify({ leadTemp }) });
       mutate();
     } catch (err) { toast(String(err), 'error'); }
   };

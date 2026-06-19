@@ -252,14 +252,14 @@ export default function DashboardPage() {
                     </div>
 
                     {/* Warmup bar */}
-                    {s.warmupDay < 15 && (
+                    {s.warmupDay < 22 && (
                       <div style={{ marginBottom: 8 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: 'var(--text-muted)', marginBottom: 3 }}>
                           <span>Warmup</span>
-                          <span>Day {s.warmupDay}/14</span>
+                          <span>Day {s.warmupDay}/21</span>
                         </div>
                         <div style={{ height: 2, background: 'rgba(255,255,255,0.06)', borderRadius: 1 }}>
-                          <div style={{ height: '100%', width: `${Math.min((s.warmupDay / 14) * 100, 100)}%`, background: '#25d366', borderRadius: 1, transition: 'width 0.4s' }} />
+                          <div style={{ height: '100%', width: `${Math.min((s.warmupDay / 21) * 100, 100)}%`, background: '#25d366', borderRadius: 1, transition: 'width 0.4s' }} />
                         </div>
                       </div>
                     )}

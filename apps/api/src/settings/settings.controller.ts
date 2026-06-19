@@ -4,13 +4,14 @@ import {
   Delete,
   Get,
   HttpCode,
+  NotFoundException,
   Param,
   Patch,
   Post,
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
-import { IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, Min, IsBoolean, IsNumber } from 'class-validator';
+import { IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, Min, IsBoolean } from 'class-validator';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { SettingsService, type EngineSettings, type AiSettings } from './settings.service';
 import { BAILEYS_QUEUE, CLOUD_API_QUEUE, DLQ_QUEUE } from '../queue/queue.constants';
@@ -46,27 +47,33 @@ class CreateProxyDto {
 
 class PatchEngineDto {
   @IsOptional()
-  @IsNumber()
+  @IsInt()
+  @Min(0)
   meanMs?: number;
 
   @IsOptional()
-  @IsNumber()
+  @IsInt()
+  @Min(0)
   stdDevMs?: number;
 
   @IsOptional()
-  @IsNumber()
+  @IsInt()
+  @Min(0)
   floorMs?: number;
 
   @IsOptional()
-  @IsNumber()
+  @IsInt()
+  @Min(0)
   ceilingMs?: number;
 
   @IsOptional()
-  @IsNumber()
+  @IsInt()
+  @Min(0)
   typingMs?: number;
 
   @IsOptional()
-  @IsNumber()
+  @IsInt()
+  @Min(1)
   dailyLimit?: number;
 
   @IsOptional()
@@ -207,6 +214,11 @@ export class SettingsController {
       where: { proxyId: id },
       data: { proxyId: null },
     });
-    await this.prisma.proxy.delete({ where: { id } });
+    try {
+      await this.prisma.proxy.delete({ where: { id } });
+    } catch (e) {
+      if ((e as { code?: string }).code === 'P2025') throw new NotFoundException(`Proxy ${id} not found`);
+      throw e;
+    }
   }
 }

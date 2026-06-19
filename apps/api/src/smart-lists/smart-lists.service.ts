@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import type { CreateSmartListDto } from './dto/create-smart-list.dto';
 import type { ManageContactsDto } from './dto/manage-contacts.dto';
@@ -39,13 +39,19 @@ export class SmartListsService {
   }
 
   async findOne(id: string): Promise<SmartListSummary & { contactIds: string[] }> {
-    const list = await this.prisma.smartList.findUniqueOrThrow({
-      where: { id },
-      include: {
-        _count: { select: { contacts: true } },
-        contacts: { select: { contactId: true } },
-      },
-    });
+    let list;
+    try {
+      list = await this.prisma.smartList.findUniqueOrThrow({
+        where: { id },
+        include: {
+          _count: { select: { contacts: true } },
+          contacts: { select: { contactId: true } },
+        },
+      });
+    } catch (e) {
+      if ((e as { code?: string }).code === 'P2025') throw new NotFoundException(`SmartList ${id} not found`);
+      throw e;
+    }
     return {
       ...this.toSummary(list),
       contactIds: list.contacts.map((c) => c.contactId),
@@ -53,22 +59,34 @@ export class SmartListsService {
   }
 
   async update(id: string, dto: Partial<CreateSmartListDto>): Promise<SmartListSummary> {
-    const list = await this.prisma.smartList.update({
-      where: { id },
-      data: {
-        ...(dto.name !== undefined && { name: dto.name }),
-        ...(dto.description !== undefined && { description: dto.description }),
-      },
-      include: { _count: { select: { contacts: true } } },
-    });
-    return this.toSummary(list);
+    try {
+      const list = await this.prisma.smartList.update({
+        where: { id },
+        data: {
+          ...(dto.name !== undefined && { name: dto.name }),
+          ...(dto.description !== undefined && { description: dto.description }),
+        },
+        include: { _count: { select: { contacts: true } } },
+      });
+      return this.toSummary(list);
+    } catch (e) {
+      if ((e as { code?: string }).code === 'P2025') throw new NotFoundException(`SmartList ${id} not found`);
+      throw e;
+    }
   }
 
   async delete(id: string): Promise<void> {
-    await this.prisma.smartList.delete({ where: { id } });
+    try {
+      await this.prisma.smartList.delete({ where: { id } });
+    } catch (e) {
+      if ((e as { code?: string }).code === 'P2025') throw new NotFoundException(`SmartList ${id} not found`);
+      throw e;
+    }
   }
 
   async addContacts(id: string, dto: ManageContactsDto): Promise<{ added: number }> {
+    const list = await this.prisma.smartList.findUnique({ where: { id }, select: { id: true } });
+    if (!list) throw new NotFoundException(`SmartList ${id} not found`);
     const result = await this.prisma.smartListContact.createMany({
       data: dto.contactIds.map((contactId) => ({ smartListId: id, contactId })),
       skipDuplicates: true,
@@ -77,6 +95,8 @@ export class SmartListsService {
   }
 
   async removeContacts(id: string, dto: ManageContactsDto): Promise<{ removed: number }> {
+    const list = await this.prisma.smartList.findUnique({ where: { id }, select: { id: true } });
+    if (!list) throw new NotFoundException(`SmartList ${id} not found`);
     const result = await this.prisma.smartListContact.deleteMany({
       where: { smartListId: id, contactId: { in: dto.contactIds } },
     });
@@ -84,6 +104,8 @@ export class SmartListsService {
   }
 
   async resolveContactIds(id: string): Promise<string[]> {
+    const list = await this.prisma.smartList.findUnique({ where: { id }, select: { id: true } });
+    if (!list) throw new NotFoundException(`SmartList ${id} not found`);
     const entries = await this.prisma.smartListContact.findMany({
       where: { smartListId: id },
       select: { contactId: true },

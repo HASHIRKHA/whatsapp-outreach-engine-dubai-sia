@@ -92,7 +92,7 @@ export class AnalyticsService {
       }),
       this.prisma.reply.count({ where: { sentiment: 'HOT' } }),
       this.prisma.campaignMessage.findMany({
-        take: 50,
+        take: 30,
         orderBy: { sentAt: 'desc' },
         where: { sentAt: { not: null } },
         include: {
@@ -229,7 +229,7 @@ export class AnalyticsService {
              COUNT(*) AS count
       FROM   "CampaignMessage"
       WHERE  "sentAt" >= ${cutoff}
-        AND  "status" != 'QUEUED'
+        AND  "status" NOT IN ('QUEUED', 'FAILED')
       GROUP  BY 1
       ORDER  BY 1
     `;
@@ -255,7 +255,7 @@ export class AnalyticsService {
       FROM   "CampaignMessage"
       WHERE  "campaignId" = ${campaignId}
         AND  "sentAt"    >= ${cutoff}
-        AND  "status"    != 'QUEUED'
+        AND  "status"    NOT IN ('QUEUED', 'FAILED')
       GROUP  BY 1
       ORDER  BY 1
     `;

@@ -30,7 +30,7 @@ async function bootstrap(): Promise<void> {
   app.useWebSocketAdapter(new IoAdapter(app));
 
   app.useGlobalPipes(
-    new ValidationPipe({ whitelist: true, transform: true }),
+    new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: true }),
   );
 
   app.enableCors({
@@ -67,23 +67,26 @@ async function bootstrap(): Promise<void> {
     { prefix: '/admin/queues', basePath: '/admin/queues' },
   );
 
-  // Fix FST_ERR_CTP_EMPTY_JSON_BODY: strip Content-Type for no-body requests only.
-  // We check Content-Length to preserve DELETE requests that legitimately carry a body
-  // (e.g. DELETE /smart-lists/:id/contacts sends a contactIds array in the body).
+  // Fix FST_ERR_CTP_EMPTY_JSON_BODY: strip Content-Type for GET/HEAD only.
+  // DELETE requests may legitimately carry a JSON body (e.g. DELETE /smart-lists/:id/contacts),
+  // so we never strip Content-Type on DELETE — Fastify handles empty-body DELETEs correctly.
   fastify.addHook('preParsing', (request, _reply, payload, done) => {
     const method = (request.method ?? '').toUpperCase();
-    const contentLength = request.headers['content-length'];
-    const hasBody = contentLength !== undefined && parseInt(contentLength, 10) > 0;
-    if ((method === 'DELETE' || method === 'GET' || method === 'HEAD') && !hasBody) {
+    if (method === 'GET' || method === 'HEAD') {
       delete (request.raw as import('http').IncomingMessage & { headers: Record<string, string | undefined> }).headers['content-type'];
     }
     done(null, payload);
   });
 
-  // Capture raw JSON bytes for X-Hub-Signature-256 HMAC validation in the webhooks controller.
+  // Capture raw JSON bytes for X-Hub-Signature-256 HMAC validation — webhooks route only.
+  // Scoped to /api/webhooks/ to avoid buffering large multipart file uploads in memory.
   // Uses preParsing (stream tee) instead of addContentTypeParser to avoid conflicting
   // with NestJS Fastify adapter's own JSON parser registration (FST_ERR_CTP_ALREADY_PRESENT).
   fastify.addHook('preParsing', (request, _reply, payload, done) => {
+    if (!request.url.startsWith('/api/webhooks/')) {
+      done(null, payload);
+      return;
+    }
     const req = request as import('fastify').FastifyRequest & { rawBody?: string };
     const chunks: Buffer[] = [];
     const pt = new PassThrough();

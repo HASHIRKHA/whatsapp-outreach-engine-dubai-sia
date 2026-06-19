@@ -5,6 +5,7 @@ import { ContactsService } from './contacts.service';
 import { ContactItemDto } from './dto/contact-item.dto';
 import { ImportContactsDto } from './dto/import-contacts.dto';
 import { BulkDeleteDto } from './dto/bulk-delete.dto';
+import { UpdateContactDto } from './dto/update-contact.dto';
 import type { ContactsPage, ImportResult, ValidateResult } from './contacts.service';
 
 @Controller('contacts')
@@ -39,8 +40,8 @@ export class ContactsController {
         ? (leadTemp as LeadTemp)
         : undefined,
       smartListId: smartListId || undefined,
-      skip: skip ? parseInt(skip, 10) : undefined,
-      take: take ? parseInt(take, 10) : undefined,
+      skip: skip ? (Number.isNaN(parseInt(skip, 10)) ? 0 : parseInt(skip, 10)) : undefined,
+      take: take ? (Number.isNaN(parseInt(take, 10)) ? 50 : parseInt(take, 10)) : undefined,
     });
   }
 
@@ -59,11 +60,13 @@ export class ContactsController {
   @Patch(':id')
   async update(
     @Param('id') id: string,
-    @Body() dto: ContactItemDto,
+    @Body() dto: UpdateContactDto,
   ): Promise<Contact> {
     return this.contacts.updateContact(id, dto);
   }
 
+  // Must be declared BEFORE @Delete(':id') — Fastify matches literal "all" against
+  // the parametric route first if the literal route is registered after it.
   @Delete('all')
   @HttpCode(200)
   async deleteAll(): Promise<{ deleted: number }> {

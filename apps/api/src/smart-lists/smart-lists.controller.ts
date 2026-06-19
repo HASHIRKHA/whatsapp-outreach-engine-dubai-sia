@@ -1,7 +1,20 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post } from '@nestjs/common';
+import { IsOptional, IsString, MinLength } from 'class-validator';
 import { SmartListsService } from './smart-lists.service';
 import { CreateSmartListDto } from './dto/create-smart-list.dto';
 import { ManageContactsDto } from './dto/manage-contacts.dto';
+
+// contactIds intentionally omitted — use POST/DELETE /:id/contacts for membership changes
+class UpdateSmartListDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+}
 
 @Controller('smart-lists')
 export class SmartListsController {
@@ -23,7 +36,7 @@ export class SmartListsController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: CreateSmartListDto) {
+  update(@Param('id') id: string, @Body() dto: UpdateSmartListDto) {
     return this.smartLists.update(id, dto);
   }
 

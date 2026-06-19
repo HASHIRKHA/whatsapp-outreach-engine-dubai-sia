@@ -86,6 +86,7 @@ export interface CampaignMessage {
   campaignId: string;
   contactId: string;
   sessionId: string | null;
+  wamid: string | null;
   renderedText: string;
   status: string;
   sentAt: string | null;

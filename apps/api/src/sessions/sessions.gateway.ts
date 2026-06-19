@@ -1,10 +1,17 @@
-import { WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
+import { OnGatewayInit, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
 import { Server } from 'socket.io';
 
-@WebSocketGateway({ cors: { origin: process.env.FRONTEND_URL ?? 'http://localhost:3000' } })
-export class SessionsGateway {
+// cors.origin is set in afterInit() so it reads the env var at runtime (after ConfigModule loads),
+// not at class-decoration time (before .env is parsed).
+@WebSocketGateway({ cors: { origin: true } })
+export class SessionsGateway implements OnGatewayInit {
   @WebSocketServer()
   private server: Server | undefined;
+
+  afterInit(server: Server): void {
+    const origin = process.env.FRONTEND_URL ?? 'http://localhost:3000';
+    server.engine.opts.cors = { origin, credentials: true };
+  }
 
   emitQr(sessionId: string, qr: string): void {
     this.server?.emit('session:qr', { sessionId, qr });

@@ -1,6 +1,13 @@
 import { Body, Controller, Get, Param, Patch, Query } from '@nestjs/common';
+import { IsBoolean, IsOptional } from 'class-validator';
 import type { Reply } from '@prisma/client';
 import { RepliesService } from './replies.service';
+
+class PatchReplyDto {
+  @IsOptional()
+  @IsBoolean()
+  handled?: boolean;
+}
 
 @Controller('replies')
 export class RepliesController {
@@ -18,16 +25,16 @@ export class RepliesController {
     return this.replies.findAll({
       sentiment,
       handled: parsedHandled,
-      skip: skip ? parseInt(skip, 10) : undefined,
-      take: take ? parseInt(take, 10) : undefined,
+      skip: skip ? (Number.isNaN(parseInt(skip, 10)) ? 0 : parseInt(skip, 10)) : undefined,
+      take: take ? (Number.isNaN(parseInt(take, 10)) ? 50 : parseInt(take, 10)) : undefined,
     });
   }
 
   @Patch(':id')
   patch(
     @Param('id') id: string,
-    @Body() body: { handled?: boolean },
+    @Body() dto: PatchReplyDto,
   ): Promise<Reply> {
-    return this.replies.patch(id, body);
+    return this.replies.patch(id, dto);
   }
 }

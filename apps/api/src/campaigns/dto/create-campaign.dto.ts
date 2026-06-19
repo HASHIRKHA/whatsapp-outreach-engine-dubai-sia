@@ -1,6 +1,7 @@
 import {
   IsEnum,
   IsInt,
+  IsNotEmpty,
   IsOptional,
   IsString,
   IsUrl,
@@ -11,6 +12,7 @@ import { MediaType, SessionMode } from '@prisma/client';
 
 export class CreateCampaignDto {
   @IsString()
+  @IsNotEmpty()
   name!: string;
 
   @IsEnum(SessionMode)

@@ -1,8 +1,3 @@
-export enum Role {
-  ADMIN = 'ADMIN',
-  OPERATOR = 'OPERATOR',
-}
-
 export enum SessionMode {
   CLOUD_API = 'CLOUD_API',
   BAILEYS = 'BAILEYS',

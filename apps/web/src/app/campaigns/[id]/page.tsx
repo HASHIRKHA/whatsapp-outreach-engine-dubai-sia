@@ -360,9 +360,8 @@ function CampaignDetailContent() {
     } catch (err) { toast(String(err), 'error'); }
   };
 
-  // Only DRAFT campaigns get a Launch button. PAUSED campaigns show Resume only — re-launching
-  // a paused campaign via the Launch flow would re-enqueue all contacts and cause duplicate sends.
-  const isLaunchable = campaign?.status === 'DRAFT';
+  // DRAFT and PAUSED campaigns can both launch new contacts (dedup prevents re-sending to existing)
+  const isLaunchable = campaign?.status === 'DRAFT' || campaign?.status === 'PAUSED';
   const isPaused = campaign?.status === 'PAUSED';
   const isRunning = campaign?.status === 'RUNNING';
 

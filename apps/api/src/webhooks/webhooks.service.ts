@@ -16,6 +16,20 @@ const STATUS_MAP: Record<string, MsgStatus | undefined> = {
   failed: MsgStatus.FAILED,
 };
 
+// Rank order: only update if the new status is a promotion (prevents out-of-order event downgrade).
+// FAILED is rank 1 — it can only overwrite QUEUED, never SENT/DELIVERED/READ/REPLIED.
+// This prevents a late "failed" webhook from Meta downgrading a message the customer already replied to.
+const STATUS_RANK: Record<MsgStatus, number> = {
+  [MsgStatus.QUEUED]: 0,
+  [MsgStatus.FAILED]: 1,
+  [MsgStatus.SENT]: 2,
+  [MsgStatus.DELIVERED]: 3,
+  [MsgStatus.READ]: 4,
+  [MsgStatus.REPLIED]: 5,
+};
+const STATUSES_BELOW = (rank: number): MsgStatus[] =>
+  (Object.keys(STATUS_RANK) as MsgStatus[]).filter((s) => STATUS_RANK[s] < rank);
+
 @Injectable()
 export class WebhooksService {
   private readonly log = new Logger(WebhooksService.name);
@@ -48,8 +62,10 @@ export class WebhooksService {
     const msgStatus = STATUS_MAP[status.status];
     if (!msgStatus) return;
 
+    // Only promote — never downgrade (guards against out-of-order Meta delivery events)
+    const rank = STATUS_RANK[msgStatus];
     const updated = await this.prisma.campaignMessage.updateMany({
-      where: { wamid: status.id },
+      where: { wamid: status.id, status: { in: STATUSES_BELOW(rank) } },
       data: { status: msgStatus },
     });
 
@@ -106,7 +122,9 @@ export class WebhooksService {
     const lastMsg = await this.prisma.campaignMessage.findFirst({
       where: {
         contactId: contact.id,
-        status: { in: [MsgStatus.SENT, MsgStatus.DELIVERED, MsgStatus.READ] },
+        // Include REPLIED so a second reply from the same contact still correlates
+        // to the campaign message (avoids campaignId: null on follow-up replies)
+        status: { in: [MsgStatus.SENT, MsgStatus.DELIVERED, MsgStatus.READ, MsgStatus.REPLIED] },
       },
       orderBy: { sentAt: 'desc' },
     });
@@ -141,6 +159,9 @@ export class WebhooksService {
       await this.prisma.contact.update({ where: { id: contact.id }, data: { valid: false } });
       this.log.log(`OPT_OUT from ${phone} — contact marked invalid`);
     }
+
+    // Emit real-time reply event to the frontend (mirrors Baileys handleInboundMessage)
+    this.gateway.emitReply(contact.id, phone, body, lastMsg?.campaignId ?? null);
 
     // wa_id from Meta is also without '+', so compare against rawPhone
     const senderName = contacts.find((c) => c.wa_id === rawPhone)?.profile.name ?? phone;

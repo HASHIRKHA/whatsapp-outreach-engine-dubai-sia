@@ -24,7 +24,7 @@ export class RepliesService {
       },
       orderBy: { createdAt: 'desc' },
       skip: params?.skip ?? 0,
-      take: params?.take ?? 50,
+      take: Math.min(params?.take ?? 50, 200),
     });
 
     if (!rows.length) return [];

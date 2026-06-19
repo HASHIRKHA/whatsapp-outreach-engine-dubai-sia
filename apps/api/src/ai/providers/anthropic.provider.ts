@@ -5,7 +5,7 @@ export class AnthropicProvider implements AiProvider {
   private readonly client: Anthropic;
   private readonly model: string;
 
-  constructor(apiKey: string, model = 'claude-haiku-4-5-20251001') {
+  constructor(apiKey: string, model = 'claude-haiku-4-5') {
     this.client = new Anthropic({ apiKey });
     this.model = model;
   }

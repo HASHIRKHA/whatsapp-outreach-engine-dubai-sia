@@ -128,7 +128,7 @@ function SessionCard({ session: s, dailyLimit, onDisconnect, onDelete, onReconne
       </div>
 
       {/* Warmup */}
-      {s.warmupDay < 21 && (
+      {s.warmupDay < 22 && (
         <div style={{ marginBottom: 14 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>
             <span>Warmup</span>

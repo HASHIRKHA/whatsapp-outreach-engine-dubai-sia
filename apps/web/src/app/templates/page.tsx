@@ -66,10 +66,21 @@ const IcBook = () => (
 );
 
 /* ── Template card (My Templates) ──────────────────────────────── */
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function TemplateCard({ template: t, onEdit, onDelete }: { template: Template; onEdit: () => void; onDelete: () => void }) {
   const [spinPreview, setSpinPreview] = useState(spinText(t.body, { name: 'Demo', city: 'Karachi' }));
+  // Template bodies are free text (operator-typed or AI-generated) — escape before
+  // injecting via dangerouslySetInnerHTML, then highlight the {spin} markers.
   const highlightSpin = (text: string) =>
-    text.replace(/\{[^}]+\}/g, (match) => `<span style="color:var(--bg-accent)">${match}</span>`);
+    escapeHtml(text).replace(/\{[^}]+\}/g, (match) => `<span style="color:var(--bg-accent)">${match}</span>`);
   return (
     <div className="glass glass-card-hover" style={{ borderRadius: 14, padding: '20px 22px', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>

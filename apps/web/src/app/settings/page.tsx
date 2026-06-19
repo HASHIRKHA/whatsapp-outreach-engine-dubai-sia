@@ -204,7 +204,7 @@ function AIBrainTab() {
   }, [aiData, initialized]);
 
   const models = {
-    anthropic: ['claude-haiku-4-5-20251001', 'claude-sonnet-4-6', 'claude-opus-4-8'],
+    anthropic: ['claude-haiku-4-5', 'claude-sonnet-4-5', 'claude-opus-4-5'],
     openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo'],
   };
 

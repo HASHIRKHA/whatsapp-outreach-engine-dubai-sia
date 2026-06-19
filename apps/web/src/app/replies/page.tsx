@@ -59,11 +59,12 @@ function RepliesContent() {
 
   useEffect(() => {
     const socket = getSocket();
-    socket.on('reply:new', (_payload: NewReplyEvent) => {
+    const handler = (_payload: NewReplyEvent) => {
       setLiveCount((n) => n + 1);
       void mutate();
-    });
-    return () => { socket.off('reply:new'); };
+    };
+    socket.on('reply:new', handler);
+    return () => { socket.off('reply:new', handler); };
   }, [mutate]);
 
   const handleMarkHandled = async (id: string, handled: boolean) => {

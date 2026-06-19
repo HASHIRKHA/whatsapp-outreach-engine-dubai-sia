@@ -16,9 +16,9 @@ import { OpenAiProvider } from './providers/openai.provider';
       inject: [ConfigService],
       useFactory: (config: ConfigService): AiProvider => {
         const providerName = config.get<string>('AI_PROVIDER') ?? 'anthropic';
-        const aiModel = config.get<string>('AI_MODEL') ?? 'claude-haiku-4-5-20251001';
+        const aiModel = config.get<string>('AI_MODEL') ?? 'claude-haiku-4-5';
         if (providerName === 'openai') {
-          return new OpenAiProvider(config.getOrThrow<string>('OPENAI_API_KEY'));
+          return new OpenAiProvider(config.getOrThrow<string>('OPENAI_API_KEY'), aiModel);
         }
         return new AnthropicProvider(config.getOrThrow<string>('ANTHROPIC_API_KEY'), aiModel);
       },

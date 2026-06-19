@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import type { Contact } from '@prisma/client';
 import { LeadTemp } from '@prisma/client';
@@ -58,18 +58,23 @@ export class ContactsService {
   async updateContact(id: string, dto: Partial<ContactItemDto>): Promise<Contact> {
     const vars =
       dto.vars !== undefined ? (dto.vars as Prisma.InputJsonValue) : undefined;
-    return this.prisma.contact.update({
-      where: { id },
-      data: {
-        ...(dto.name !== undefined && { name: dto.name }),
-        ...(dto.city !== undefined && { city: dto.city }),
-        ...(dto.interest !== undefined && { interest: dto.interest }),
-        ...(dto.notes !== undefined && { notes: dto.notes }),
-        ...(dto.leadTemp !== undefined && { leadTemp: dto.leadTemp }),
-        ...(vars !== undefined && { vars }),
-        ...(dto.tags !== undefined && { tags: dto.tags }),
-      },
-    });
+    try {
+      return await this.prisma.contact.update({
+        where: { id },
+        data: {
+          ...(dto.name !== undefined && { name: dto.name }),
+          ...(dto.city !== undefined && { city: dto.city }),
+          ...(dto.interest !== undefined && { interest: dto.interest }),
+          ...(dto.notes !== undefined && { notes: dto.notes }),
+          ...(dto.leadTemp !== undefined && { leadTemp: dto.leadTemp }),
+          ...(vars !== undefined && { vars }),
+          ...(dto.tags !== undefined && { tags: dto.tags }),
+        },
+      });
+    } catch (e) {
+      if ((e as { code?: string }).code === 'P2025') throw new NotFoundException(`Contact ${id} not found`);
+      throw e;
+    }
   }
 
   async importContacts(dto: ImportContactsDto): Promise<ImportResult> {
@@ -189,7 +194,12 @@ export class ContactsService {
   }
 
   async deleteContact(id: string): Promise<void> {
-    await this.prisma.contact.delete({ where: { id } });
+    try {
+      await this.prisma.contact.delete({ where: { id } });
+    } catch (e) {
+      if ((e as { code?: string }).code === 'P2025') throw new NotFoundException(`Contact ${id} not found`);
+      throw e;
+    }
   }
 
   async deleteContacts(ids: string[]): Promise<{ deleted: number }> {
