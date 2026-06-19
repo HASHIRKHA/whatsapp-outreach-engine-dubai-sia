@@ -4,6 +4,9 @@ import { ConfigService } from '@nestjs/config';
 export interface TemplateParameter {
   type: 'text' | 'currency' | 'date_time' | 'image' | 'document' | 'video';
   text?: string;
+  image?: { link: string };
+  document?: { link: string; filename?: string };
+  video?: { link: string };
 }
 
 export interface TemplateComponent {
@@ -13,12 +16,24 @@ export interface TemplateComponent {
   parameters?: TemplateParameter[];
 }
 
+export interface HeaderMedia {
+  type: 'IMAGE' | 'DOCUMENT' | 'VIDEO';
+  url: string;
+  filename?: string;
+}
+
 export interface SendTemplateOptions {
   to: string;
   templateName: string;
   languageCode?: string;
   components?: TemplateComponent[];
   phoneNumberId?: string;
+  /**
+   * Fills the template's pre-approved media header slot with this link.
+   * Only works if `templateName` was approved in Meta Business Manager with a
+   * matching header type (image/document/video) — otherwise Meta rejects the send.
+   */
+  headerMedia?: HeaderMedia;
 }
 
 export interface SendTemplateResult {
@@ -44,11 +59,13 @@ export class CloudApiService {
 
   async sendTemplate(opts: SendTemplateOptions): Promise<SendTemplateResult> {
     const phoneNumberId = opts.phoneNumberId ?? this.defaultPhoneNumberId;
+    const components = opts.components ?? this.buildHeaderMediaComponents(opts.headerMedia);
 
     if (this.isDryRun) {
       const wamid = `dry_wamid_${Date.now()}`;
       this.log.log(
-        `[DRY_RUN] sendTemplate to=${opts.to} template=${opts.templateName} phoneNumberId=${phoneNumberId} => ${wamid}`,
+        `[DRY_RUN] sendTemplate to=${opts.to} template=${opts.templateName} phoneNumberId=${phoneNumberId}` +
+          `${opts.headerMedia ? ` [+${opts.headerMedia.type}]` : ''} => ${wamid}`,
       );
       return { wamid, dryRun: true };
     }
@@ -65,7 +82,7 @@ export class CloudApiService {
       template: {
         name: opts.templateName,
         language: { code: opts.languageCode ?? this.defaultLanguageCode },
-        ...(opts.components?.length ? { components: opts.components } : {}),
+        ...(components?.length ? { components } : {}),
       },
     };
 
@@ -93,5 +110,18 @@ export class CloudApiService {
 
     this.log.log(`sendTemplate to=${opts.to} template=${opts.templateName} => wamid=${wamid}`);
     return { wamid, dryRun: false };
+  }
+
+  private buildHeaderMediaComponents(headerMedia?: HeaderMedia): TemplateComponent[] | undefined {
+    if (!headerMedia) return undefined;
+
+    const parameter: TemplateParameter =
+      headerMedia.type === 'DOCUMENT'
+        ? { type: 'document', document: { link: headerMedia.url, filename: headerMedia.filename } }
+        : headerMedia.type === 'VIDEO'
+          ? { type: 'video', video: { link: headerMedia.url } }
+          : { type: 'image', image: { link: headerMedia.url } };
+
+    return [{ type: 'header', parameters: [parameter] }];
   }
 }

@@ -118,6 +118,9 @@ export class CloudApiWorker extends WorkerHost {
       const result = await this.cloudApi.sendTemplate({
         to: job.data.phone,
         templateName: job.data.templateName,
+        headerMedia: job.data.mediaUrl && job.data.mediaType
+          ? { type: job.data.mediaType, url: job.data.mediaUrl, filename: job.data.mediaFilename }
+          : undefined,
       });
 
       await this.prisma.campaignMessage.update({

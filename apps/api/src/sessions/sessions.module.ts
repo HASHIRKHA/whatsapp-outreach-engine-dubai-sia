@@ -1,12 +1,13 @@
 import { Module } from '@nestjs/common';
 import { AntibanModule } from '../antiban/antiban.module';
 import { ContactsModule } from '../contacts/contacts.module';
+import { MediaModule } from '../media/media.module';
 import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
 import { SessionsGateway } from './sessions.gateway';
 
 @Module({
-  imports: [AntibanModule, ContactsModule],
+  imports: [AntibanModule, ContactsModule, MediaModule],
   controllers: [SessionsController],
   providers: [SessionsService, SessionsGateway],
   exports: [SessionsService, SessionsGateway],

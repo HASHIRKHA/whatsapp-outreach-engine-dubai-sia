@@ -7,7 +7,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { type Prisma, type Session, MsgStatus, SessionMode, SessionStatus } from '@prisma/client';
+import { type Prisma, type Session, MediaType, MsgStatus, SessionMode, SessionStatus } from '@prisma/client';
 import makeWASocket, {
   DisconnectReason,
   fetchLatestBaileysVersion,
@@ -18,6 +18,7 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { FingerprintService } from '../antiban/fingerprint.service';
 import { ProxyService } from '../antiban/proxy.service';
 import { ContactsService } from '../contacts/contacts.service';
+import { MediaService } from '../media/media.service';
 import { makeDbAuthState } from './baileys/db-auth-state';
 import { deriveKey } from './baileys/auth-cipher';
 import { buildFetchAgent } from './baileys/build-fetch-agent';
@@ -41,6 +42,7 @@ export class SessionsService implements OnModuleInit, OnModuleDestroy {
     private readonly fingerprint: FingerprintService,
     private readonly proxy: ProxyService,
     private readonly contactsService: ContactsService,
+    private readonly media: MediaService,
     config: ConfigService,
   ) {
     this.encKey = deriveKey(config.getOrThrow<string>('SESSION_ENCRYPTION_KEY'));
@@ -343,13 +345,14 @@ export class SessionsService implements OnModuleInit, OnModuleDestroy {
 
     // Auto-invalidate contacts who signal opt-out — prevents continued sending after STOP
     const lowerText = text.toLowerCase();
-    // Single-word keywords matched against the word set — avoids "stop" matching "non-stop" / "bus stop"
-    const OPT_OUT_WORDS = new Set(['stop', 'unsubscribe', 'optout']);
-    // Multi-word phrases are naturally specific enough for substring matching
+    // Short keywords must match the WHOLE message — tokenising on word boundaries still
+    // false-positives on "non-stop" (hyphen) and "bus stop" / "won't stop" (legit standalone word)
+    const OPT_OUT_KEYWORDS = new Set(['stop', 'unsubscribe', 'optout']);
+    // Multi-word phrases are unambiguous enough to match anywhere in the message
     const OPT_OUT_PHRASES = ['remove me', 'opt out', "don't message", 'dont message', 'stop messaging', 'no more messages'];
-    const msgWords = new Set(lowerText.split(/[\s,.!?;:—\-]+/).filter(Boolean));
+    const cleanedText = lowerText.trim().replace(/[.,!?;:]+$/, '');
     const isOptOut =
-      [...OPT_OUT_WORDS].some((w) => msgWords.has(w)) ||
+      OPT_OUT_KEYWORDS.has(cleanedText) ||
       OPT_OUT_PHRASES.some((p) => lowerText.includes(p));
     if (isOptOut) {
       await this.prisma.contact.update({ where: { id: contact.id }, data: { valid: false } });
@@ -492,7 +495,7 @@ export class SessionsService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Sends a text message via Baileys, preceded by a typing-presence signal.
+   * Sends a text or media message via Baileys, preceded by a typing-presence signal.
    * Called exclusively by BaileysWorker — never call from a controller.
    */
   async sendBaileyMessage(
@@ -500,9 +503,12 @@ export class SessionsService implements OnModuleInit, OnModuleDestroy {
     phone: string,
     text: string,
     typingMs: number,
+    media?: { url: string; type: MediaType; mimeType?: string; filename?: string },
   ): Promise<void> {
     if (this.dryRun) {
-      this.log.log(`[DRY_RUN] skipping Baileys send to ${phone}: "${text.slice(0, 80)}"`);
+      this.log.log(
+        `[DRY_RUN] skipping Baileys send to ${phone}: "${text.slice(0, 80)}"${media ? ` [+${media.type}]` : ''}`,
+      );
       return;
     }
     const sock = this.sockets.get(sessionId);
@@ -510,8 +516,9 @@ export class SessionsService implements OnModuleInit, OnModuleDestroy {
       throw new Error(`Session ${sessionId} socket is not active`);
     }
     const jid = `${phone.replace(/\D/g, '')}@s.whatsapp.net`;
-    // WhatsApp hard limit — silently truncate rather than throw and lose the message
-    const MAX_WA_CHARS = 4096;
+    // WhatsApp hard limits — silently truncate rather than throw and lose the message.
+    // Media captions are capped tighter (1024) than standalone text messages (4096).
+    const MAX_WA_CHARS = media ? 1024 : 4096;
     const safeText = text.length > MAX_WA_CHARS ? text.slice(0, MAX_WA_CHARS) : text;
     if (text.length > MAX_WA_CHARS) {
       this.log.warn(`[${sessionId}] message truncated ${text.length}→${MAX_WA_CHARS} chars for ${phone}`);
@@ -519,7 +526,30 @@ export class SessionsService implements OnModuleInit, OnModuleDestroy {
     await sock.sendPresenceUpdate('composing', jid);
     await new Promise<void>((resolve) => setTimeout(resolve, typingMs));
     await sock.sendPresenceUpdate('paused', jid);
-    await sock.sendMessage(jid, { text: safeText });
+
+    if (!media) {
+      await sock.sendMessage(jid, { text: safeText });
+      return;
+    }
+
+    const storedName = this.media.storedNameFromUrl(media.url);
+    if (!storedName) {
+      throw new Error(`Cannot resolve local path for media URL ${media.url}`);
+    }
+    const buffer = await this.media.readFile(storedName);
+
+    if (media.type === MediaType.IMAGE) {
+      await sock.sendMessage(jid, { image: buffer, caption: safeText });
+    } else if (media.type === MediaType.VIDEO) {
+      await sock.sendMessage(jid, { video: buffer, caption: safeText });
+    } else {
+      await sock.sendMessage(jid, {
+        document: buffer,
+        mimetype: media.mimeType ?? 'application/octet-stream',
+        fileName: media.filename ?? 'file',
+        caption: safeText,
+      });
+    }
   }
 
   /** Exposed for testing purposes only. */

@@ -9,16 +9,20 @@ import { createBullBoard } from '@bull-board/api';
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import type { BaseAdapter } from '@bull-board/api/dist/src/queueAdapters/base';
 import { FastifyAdapter as BullBoardFastifyAdapter } from '@bull-board/fastify';
+import fastifyMultipart from '@fastify/multipart';
+import type { FastifyPluginCallback } from 'fastify';
 import { getQueueToken } from '@nestjs/bullmq';
 import { type Queue } from 'bullmq';
 import { PassThrough } from 'stream';
 import { AppModule } from './app.module';
 import { BAILEYS_QUEUE, CLOUD_API_QUEUE, DLQ_QUEUE } from './queue/queue.constants';
+import { MediaService } from './media/media.service';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter({ logger: process.env.NODE_ENV !== 'test', bodyLimit: 10_485_760 }),
+    // bodyLimit must clear MediaService.maxFileBytes (16MB) plus multipart framing overhead
+    new FastifyAdapter({ logger: process.env.NODE_ENV !== 'test', bodyLimit: 20 * 1024 * 1024 }),
   );
 
   app.setGlobalPrefix('api', { exclude: ['health'] });
@@ -35,7 +39,15 @@ async function bootstrap(): Promise<void> {
   });
 
   // ── Bull Board ─────────────────────────────────────────────────────────────
-  const fastify = app.getHttpAdapter().getInstance() as import('fastify').FastifyInstance;
+  const fastify = app.getHttpAdapter().getInstance() as unknown as import('fastify').FastifyInstance;
+
+  // @fastify/multipart's FastifyInstance/FastifyRequest augmentation (multipartErrors, request.file())
+  // doesn't structurally match the @bull-board/fastify plugin signature below — both are real
+  // runtime-compatible Fastify v4 plugins, this is a TS-only cross-plugin typing friction.
+  await fastify.register(
+    fastifyMultipart as unknown as FastifyPluginCallback<{ limits?: { fileSize?: number } }>,
+    { limits: { fileSize: MediaService.maxFileBytes } },
+  );
 
   const cloudApiQueue = app.get<Queue>(getQueueToken(CLOUD_API_QUEUE));
   const baileysQueue = app.get<Queue>(getQueueToken(BAILEYS_QUEUE));
@@ -49,10 +61,11 @@ async function bootstrap(): Promise<void> {
   });
   boardAdapter.setBasePath('/admin/queues');
 
-  await fastify.register(boardAdapter.registerPlugin(), {
-    prefix: '/admin/queues',
-    basePath: '/admin/queues',
-  });
+  // Same cross-plugin typing friction as the multipart registration above.
+  await fastify.register(
+    boardAdapter.registerPlugin() as unknown as FastifyPluginCallback<{ basePath: string }>,
+    { prefix: '/admin/queues', basePath: '/admin/queues' },
+  );
 
   // Fix FST_ERR_CTP_EMPTY_JSON_BODY: strip Content-Type for no-body requests only.
   // We check Content-Length to preserve DELETE requests that legitimately carry a body

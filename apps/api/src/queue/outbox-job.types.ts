@@ -1,4 +1,4 @@
-import { SessionMode } from '@prisma/client';
+import { MediaType, SessionMode } from '@prisma/client';
 
 export interface OutboxJob {
   campaignMessageId: string;
@@ -12,6 +12,12 @@ export interface OutboxJob {
   activeFrom: number;
   activeTo: number;
   mode: SessionMode;
+  /** Campaign media attachment — public URL served by GET /media/:filename. */
+  mediaUrl?: string;
+  mediaType?: MediaType;
+  /** Required for Baileys document sends; unused by Cloud API (link-based header). */
+  mediaMimeType?: string;
+  mediaFilename?: string;
 }
 
 export interface DlqJob {

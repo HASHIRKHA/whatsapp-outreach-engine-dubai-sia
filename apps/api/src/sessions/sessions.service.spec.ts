@@ -7,6 +7,7 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { FingerprintService } from '../antiban/fingerprint.service';
 import { ProxyService } from '../antiban/proxy.service';
 import { ContactsService } from '../contacts/contacts.service';
+import { MediaService } from '../media/media.service';
 
 import makeWASocket from '@whiskeysockets/baileys';
 
@@ -89,10 +90,22 @@ describe('SessionsService', () => {
         update: jest.fn().mockResolvedValue(mockSession),
         delete: jest.fn().mockResolvedValue(mockSession),
       },
+      contact: {
+        findUnique: jest.fn(),
+        update: jest.fn().mockResolvedValue({}),
+      },
+      reply: {
+        create: jest.fn().mockResolvedValue({}),
+      },
+      campaignMessage: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        update: jest.fn().mockResolvedValue({}),
+      },
     };
     const mockGateway = {
       emitQr: jest.fn(),
       emitStatus: jest.fn(),
+      emitReply: jest.fn(),
     };
     const mockConfig = {
       getOrThrow: jest.fn().mockReturnValue('test-session-encryption-key'),
@@ -100,6 +113,10 @@ describe('SessionsService', () => {
     };
     const mockContactsService = {
       upsertFromWhatsApp: jest.fn().mockResolvedValue({ imported: 0 }),
+    };
+    const mockMedia = {
+      storedNameFromUrl: jest.fn(),
+      readFile: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -110,6 +127,7 @@ describe('SessionsService', () => {
         { provide: FingerprintService, useValue: mockFingerprint },
         { provide: ProxyService, useValue: mockProxy },
         { provide: ContactsService, useValue: mockContactsService },
+        { provide: MediaService, useValue: mockMedia },
         { provide: ConfigService, useValue: mockConfig },
       ],
     }).compile();
@@ -268,6 +286,48 @@ describe('SessionsService', () => {
       const makeWASocketMock = makeWASocket as jest.Mock;
       const callArgs = makeWASocketMock.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
       expect(callArgs?.fetchAgent).toBeUndefined();
+    });
+  });
+
+  describe('handleInboundMessage opt-out detection', () => {
+    beforeEach(() => {
+      (prisma.contact.findUnique as jest.Mock).mockResolvedValue({ id: 'contact-1', phone: '+15551234567' });
+      (prisma.campaignMessage.findFirst as jest.Mock).mockResolvedValue(null);
+    });
+
+    it.each(['STOP', 'stop', 'unsubscribe', 'optout', 'Stop.', 'STOP!!'])(
+      'marks contact invalid on standalone keyword "%s"',
+      async (word) => {
+        await (service as unknown as { handleInboundMessage: (s: string, p: string, t: string) => Promise<void> })
+          .handleInboundMessage('sess-1', '+15551234567', word);
+        expect(prisma.contact.update).toHaveBeenCalledWith({
+          where: { id: 'contact-1' },
+          data: { valid: false },
+        });
+      },
+    );
+
+    it.each(['remove me', 'opt out', "don't message", 'stop messaging', 'no more messages'])(
+      'marks contact invalid on phrase "%s"',
+      async (phrase) => {
+        await (service as unknown as { handleInboundMessage: (s: string, p: string, t: string) => Promise<void> })
+          .handleInboundMessage('sess-1', '+15551234567', `please ${phrase}`);
+        expect(prisma.contact.update).toHaveBeenCalledWith({
+          where: { id: 'contact-1' },
+          data: { valid: false },
+        });
+      },
+    );
+
+    it.each([
+      'non-stop flight to Dubai',
+      'the bus stop is closer now',
+      "I won't stop using your product",
+      "Sounds great, let's talk tomorrow",
+    ])('does NOT opt out on "%s"', async (text) => {
+      await (service as unknown as { handleInboundMessage: (s: string, p: string, t: string) => Promise<void> })
+        .handleInboundMessage('sess-1', '+15551234567', text);
+      expect(prisma.contact.update).not.toHaveBeenCalled();
     });
   });
 

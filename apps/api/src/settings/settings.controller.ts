@@ -102,6 +102,12 @@ export class SettingsController {
     @InjectQueue(DLQ_QUEUE) private readonly dlqQ: Queue,
   ) {}
 
+  /* ── Root (Sessions page reads dailyLimit from here) ────────── */
+  @Get()
+  getRoot(): EngineSettings {
+    return this.settings.getEngineSettings();
+  }
+
   /* ── Dry-run status (kept for backwards compatibility) ─────── */
   @Get('dry-run')
   dryRun(): { dryRun: boolean } {

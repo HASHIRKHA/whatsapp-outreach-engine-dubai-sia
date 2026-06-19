@@ -115,6 +115,14 @@ export class BaileysWorker extends WorkerHost {
         job.data.phone,
         job.data.renderedText,
         this.delay.typingMs,
+        job.data.mediaUrl && job.data.mediaType
+          ? {
+              url: job.data.mediaUrl,
+              type: job.data.mediaType,
+              mimeType: job.data.mediaMimeType,
+              filename: job.data.mediaFilename,
+            }
+          : undefined,
       );
 
       await this.prisma.campaignMessage.update({

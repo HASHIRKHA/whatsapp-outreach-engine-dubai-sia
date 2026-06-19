@@ -47,6 +47,12 @@ enum LeadTemp {
   COLD
 }
 
+enum MediaType {
+  IMAGE
+  DOCUMENT
+  VIDEO
+}
+
 // ─── Models ───────────────────────────────────────────────────────────────────
 
 model Session {
@@ -114,16 +120,20 @@ model Template {
 }
 
 model Campaign {
-  id         String         @id @default(cuid())
-  name       String
-  mode       SessionMode
-  templateId String?
-  status     CampaignStatus @default(DRAFT)
-  activeFrom Int            @default(8) // active-hours window (local)
-  activeTo   Int            @default(22)
-  createdAt  DateTime       @default(now())
-  messages   CampaignMessage[]
-  replies    Reply[]
+  id            String         @id @default(cuid())
+  name          String
+  mode          SessionMode
+  templateId    String?
+  status        CampaignStatus @default(DRAFT)
+  activeFrom    Int            @default(8) // active-hours window (local)
+  activeTo      Int            @default(22)
+  mediaUrl      String? // public URL served by GET /media/:filename
+  mediaType     MediaType?
+  mediaMimeType String? // needed for Baileys document sends
+  mediaFilename String? // original upload filename, shown as document caption/name
+  createdAt     DateTime       @default(now())
+  messages      CampaignMessage[]
+  replies       Reply[]
 }
 
 model CampaignMessage {

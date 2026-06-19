@@ -19,6 +19,7 @@
     "@anthropic-ai/sdk": "^0.104.1",
     "@bull-board/api": "^5.23.0",
     "@bull-board/fastify": "^5.23.0",
+    "@fastify/multipart": "^8.3.1",
     "@nestjs/bullmq": "^10.2.3",
     "@nestjs/common": "^10.4.4",
     "@nestjs/config": "^3.2.3",

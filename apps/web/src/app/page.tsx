@@ -81,14 +81,14 @@ export default function DashboardPage() {
   const [period, setPeriod] = React.useState<Period>('7d');
 
   const sessions = data?.sessionPool ?? [];
-  const daily = data?.dailyMessages ?? [];
   const recent = data?.recentActivity ?? [];
 
   const chartData = React.useMemo(() => {
+    const daily = data?.dailyMessages ?? [];
     if (period === 'today') return daily.slice(-1);
     if (period === '7d') return daily.slice(-7);
     return daily;
-  }, [daily, period]);
+  }, [data?.dailyMessages, period]);
 
   const totalInPeriod = chartData.reduce((s, d) => s + d.count, 0);
 

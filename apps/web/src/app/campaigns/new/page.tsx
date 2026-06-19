@@ -36,6 +36,16 @@ const IcBrain = () => (
     <path d="M12 2a5 5 0 0 0-4.9 6A5 5 0 0 0 4 13a5 5 0 0 0 3.1 4.6A3.5 3.5 0 0 0 10.5 22h3a3.5 3.5 0 0 0 3.4-4.4A5 5 0 0 0 20 13a5 5 0 0 0-3.1-5A5 5 0 0 0 12 2z"/>
   </svg>
 );
+const IcPaperclip = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+  </svg>
+);
+const IcX = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+  </svg>
+);
 
 /* ── Shared styles ─────────────────────────────────────────── */
 const inputStyle: React.CSSProperties = {
@@ -99,11 +109,42 @@ function NewCampaignContent() {
   const [aiMessages, setAiMessages] = useState<string[]>([]);
   const [aiGenerating, setAiGenerating] = useState(false);
 
+  const [mediaUrl, setMediaUrl] = useState('');
+  const [mediaType, setMediaType] = useState('');
+  const [mediaMimeType, setMediaMimeType] = useState('');
+  const [mediaFilename, setMediaFilename] = useState('');
+  const [mediaUploading, setMediaUploading] = useState(false);
+
   const { data: templates } = useSWR<Template[]>('/templates', (url: string) => apiFetch<Template[]>(url));
   const { data: smartLists } = useSWR<SmartList[]>('/smart-lists', (url: string) => apiFetch<SmartList[]>(url));
 
   const selectedTemplate = templates?.find((t) => t.id === templateId);
   const selectedSmartList = smartLists?.find((sl) => sl.id === smartListId);
+
+  const handleMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setMediaUploading(true);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const res = await fetch('/api/media/upload', {
+        method: 'POST',
+        body: form,
+        headers: process.env.NEXT_PUBLIC_API_KEY ? { 'X-API-Key': process.env.NEXT_PUBLIC_API_KEY } : {},
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json() as { url: string; type: string; mimeType: string; filename: string };
+      setMediaUrl(data.url);
+      setMediaType(data.type);
+      setMediaMimeType(data.mimeType);
+      setMediaFilename(data.filename);
+      toast(`Attachment added: ${data.filename}`, 'success');
+    } catch (err) { toast(`Upload failed: ${String(err)}`, 'error'); }
+    finally { setMediaUploading(false); e.target.value = ''; }
+  };
+
+  const clearMedia = () => { setMediaUrl(''); setMediaType(''); setMediaMimeType(''); setMediaFilename(''); };
 
   const handleGenerateAI = async () => {
     setAiGenerating(true);
@@ -138,7 +179,10 @@ function NewCampaignContent() {
 
       const campaign = await apiFetch<{ id: string }>('/campaigns', {
         method: 'POST',
-        body: JSON.stringify({ name, mode, templateId: resolvedTemplateId, activeFrom, activeTo }),
+        body: JSON.stringify({
+          name, mode, templateId: resolvedTemplateId, activeFrom, activeTo,
+          ...(mediaUrl ? { mediaUrl, mediaType, mediaMimeType, mediaFilename } : {}),
+        }),
       });
 
       if (!asDraft && smartListId) {
@@ -277,6 +321,53 @@ function NewCampaignContent() {
                   )}
                 </div>
               )}
+
+              {/* ── Optional media attachment ─────────────────── */}
+              <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                <label style={labelStyle}>Attachment (optional)</label>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 10, lineHeight: 1.5 }}>
+                  Add an image, video, or document that will be sent alongside the message. Max 16 MB.
+                </div>
+                {mediaUrl ? (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    background: 'rgba(212,175,55,0.05)', border: '1px solid rgba(212,175,55,0.15)',
+                    borderRadius: 10, padding: '10px 14px',
+                  }}>
+                    {mediaType === 'IMAGE' ? (
+                      <img src={mediaUrl} alt={mediaFilename} style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 6, flexShrink: 0 }} />
+                    ) : (
+                      <div style={{ width: 40, height: 40, borderRadius: 8, background: 'rgba(212,175,55,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#D4AF37' }}>
+                        <IcPaperclip />
+                      </div>
+                    )}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{mediaFilename}</div>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: 2 }}>{mediaType}</div>
+                    </div>
+                    <button onClick={clearMedia} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}>
+                      <IcX />
+                    </button>
+                  </div>
+                ) : (
+                  <label style={{
+                    display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
+                    background: 'rgba(255,255,255,0.02)', border: '1px dashed rgba(255,255,255,0.1)',
+                    borderRadius: 10, cursor: mediaUploading ? 'wait' : 'pointer',
+                    color: 'var(--text-muted)', fontSize: 12, transition: 'border-color 0.15s',
+                  }}>
+                    <IcPaperclip />
+                    {mediaUploading ? 'Uploading…' : 'Click to attach a file'}
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/3gpp,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                      style={{ display: 'none' }}
+                      disabled={mediaUploading}
+                      onChange={handleMediaUpload}
+                    />
+                  </label>
+                )}
+              </div>
             </div>
           )}
 
@@ -391,6 +482,7 @@ function NewCampaignContent() {
                   { label: 'Campaign Name', value: name || '(unnamed)' },
                   { label: 'Mode', value: mode === 'CLOUD_API' ? 'Cloud API' : 'WebSocket' },
                   { label: 'Message Source', value: sourceType === 'template' ? (selectedTemplate?.name ?? 'None selected') : `AI Generated (${aiMessages.length} messages)` },
+                  { label: 'Attachment', value: mediaFilename || 'None' },
                   { label: 'Smart List', value: selectedSmartList ? `${selectedSmartList.name} (${selectedSmartList.contactCount} contacts)` : 'None selected' },
                   { label: 'Active Hours', value: `${activeFrom}:00 – ${activeTo}:00` },
                   { label: 'Est. Duration', value: estimatedHours > 0 ? `~${estimatedHours}h ${estimatedMins}m` : `~${estimatedMins}m` },

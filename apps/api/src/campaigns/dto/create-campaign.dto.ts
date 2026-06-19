@@ -3,10 +3,11 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  IsUrl,
   Max,
   Min,
 } from 'class-validator';
-import { SessionMode } from '@prisma/client';
+import { MediaType, SessionMode } from '@prisma/client';
 
 export class CreateCampaignDto {
   @IsString()
@@ -30,4 +31,20 @@ export class CreateCampaignDto {
   @Min(0)
   @Max(23)
   activeTo?: number;
+
+  @IsOptional()
+  @IsUrl({ require_tld: false }) // require_tld: false allows http://localhost in dev
+  mediaUrl?: string;
+
+  @IsOptional()
+  @IsEnum(MediaType)
+  mediaType?: MediaType;
+
+  @IsOptional()
+  @IsString()
+  mediaMimeType?: string;
+
+  @IsOptional()
+  @IsString()
+  mediaFilename?: string;
 }

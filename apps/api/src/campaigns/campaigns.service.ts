@@ -48,6 +48,10 @@ export class CampaignsService {
         templateId: dto.templateId,
         activeFrom: dto.activeFrom ?? 8,
         activeTo: dto.activeTo ?? 22,
+        mediaUrl: dto.mediaUrl,
+        mediaType: dto.mediaType,
+        mediaMimeType: dto.mediaMimeType,
+        mediaFilename: dto.mediaFilename,
       },
     });
   }
@@ -231,6 +235,10 @@ export class CampaignsService {
           activeFrom: campaign.activeFrom,
           activeTo: campaign.activeTo,
           mode: campaign.mode,
+          mediaUrl: campaign.mediaUrl ?? undefined,
+          mediaType: campaign.mediaType ?? undefined,
+          mediaMimeType: campaign.mediaMimeType ?? undefined,
+          mediaFilename: campaign.mediaFilename ?? undefined,
         },
         { delay: totalDelay },
       );

@@ -228,4 +228,52 @@ describe('WebhooksService', () => {
     });
     expect(mockPrisma.campaignMessage.updateMany).not.toHaveBeenCalled();
   });
+
+  describe('Opt-out detection', () => {
+    beforeEach(() => {
+      mockPrisma.contact.findUnique.mockResolvedValue({ id: 'contact-1', phone: '15551234567' });
+      mockPrisma.campaignMessage.findFirst.mockResolvedValue(null);
+      mockPrisma.reply.create.mockResolvedValue({});
+    });
+
+    it.each(['STOP', 'stop', 'unsubscribe', 'optout'])(
+      'marks contact invalid on standalone keyword "%s"',
+      async (word) => {
+        await service.processCloudApiPayload(makeInboundPayload('15551234567', word));
+        expect(mockPrisma.contact.update).toHaveBeenCalledWith({
+          where: { id: 'contact-1' },
+          data: { valid: false },
+        });
+      },
+    );
+
+    it.each(['remove me', 'opt out', "don't message", 'stop messaging', 'no more messages'])(
+      'marks contact invalid on phrase "%s"',
+      async (phrase) => {
+        await service.processCloudApiPayload(
+          makeInboundPayload('15551234567', `please ${phrase}`),
+        );
+        expect(mockPrisma.contact.update).toHaveBeenCalledWith({
+          where: { id: 'contact-1' },
+          data: { valid: false },
+        });
+      },
+    );
+
+    it.each([
+      'non-stop flight to Dubai',
+      'the bus stop is closer now',
+      "I won't stop using your product",
+    ])('does NOT opt out on false-positive substring "%s"', async (text) => {
+      await service.processCloudApiPayload(makeInboundPayload('15551234567', text));
+      expect(mockPrisma.contact.update).not.toHaveBeenCalled();
+    });
+
+    it('does not opt out on an unrelated reply', async () => {
+      await service.processCloudApiPayload(
+        makeInboundPayload('15551234567', "Sounds great, let's talk tomorrow"),
+      );
+      expect(mockPrisma.contact.update).not.toHaveBeenCalled();
+    });
+  });
 });

@@ -17,6 +17,7 @@ import { SettingsModule } from './settings/settings.module';
 import { RepliesModule } from './replies/replies.module';
 import { HealthModule } from './health/health.module';
 import { SmartListsModule } from './smart-lists/smart-lists.module';
+import { MediaModule } from './media/media.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 
 @Module({
@@ -37,6 +38,7 @@ import { AllExceptionsFilter } from './common/filters/http-exception.filter';
     RepliesModule,
     HealthModule,
     SmartListsModule,
+    MediaModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

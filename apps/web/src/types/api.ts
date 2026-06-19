@@ -53,6 +53,8 @@ export interface Session {
   createdAt: string;
 }
 
+export type MediaType = 'IMAGE' | 'DOCUMENT' | 'VIDEO';
+
 export interface Campaign {
   id: string;
   name: string;
@@ -61,6 +63,10 @@ export interface Campaign {
   status: 'DRAFT' | 'RUNNING' | 'PAUSED' | 'DONE';
   activeFrom: number;
   activeTo: number;
+  mediaUrl: string | null;
+  mediaType: MediaType | null;
+  mediaMimeType: string | null;
+  mediaFilename: string | null;
   createdAt: string;
 }
 

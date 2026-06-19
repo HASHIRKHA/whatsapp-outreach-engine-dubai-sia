@@ -126,11 +126,17 @@ export class WebhooksService {
       });
     }
 
-    // Auto-invalidate contacts who signal opt-out
+    // Auto-invalidate contacts who signal opt-out — prevents continued sending after STOP
     const lowerBody = body.toLowerCase();
-    const isOptOut = ['stop', 'unsubscribe', 'remove me', 'opt out', 'optout', "don't message", 'dont message'].some(
-      (p) => lowerBody.includes(p),
-    );
+    // Short keywords must match the WHOLE message — tokenising on word boundaries still
+    // false-positives on "non-stop" (hyphen) and "bus stop" / "won't stop" (legit standalone word)
+    const OPT_OUT_KEYWORDS = new Set(['stop', 'unsubscribe', 'optout']);
+    // Multi-word phrases are unambiguous enough to match anywhere in the message
+    const OPT_OUT_PHRASES = ['remove me', 'opt out', "don't message", 'dont message', 'stop messaging', 'no more messages'];
+    const cleanedBody = lowerBody.trim().replace(/[.,!?;:]+$/, '');
+    const isOptOut =
+      OPT_OUT_KEYWORDS.has(cleanedBody) ||
+      OPT_OUT_PHRASES.some((p) => lowerBody.includes(p));
     if (isOptOut) {
       await this.prisma.contact.update({ where: { id: contact.id }, data: { valid: false } });
       this.log.log(`OPT_OUT from ${phone} — contact marked invalid`);

@@ -11,24 +11,33 @@ async function proxy(req: NextRequest, { params }: { params: Promise<{ path: str
   const search = req.nextUrl.search;
   const url = `${API_URL}/${targetPath}${search}`;
 
-  let body: string | undefined;
   const method = req.method;
-  if (method !== 'GET' && method !== 'HEAD') {
-    try {
-      // Use arrayBuffer to avoid Next.js body-size cap on req.text()
-      const buf = await req.arrayBuffer();
-      body = Buffer.from(buf).toString('utf8');
-    } catch {
-      body = undefined;
-    }
-  }
+  let body: BodyInit | undefined;
 
   const headers: Record<string, string> = {};
   if (process.env.API_KEY) {
     headers['X-API-Key'] = process.env.API_KEY;
   }
-  if (body !== undefined) {
-    headers['Content-Type'] = 'application/json';
+
+  if (method !== 'GET' && method !== 'HEAD') {
+    const contentType = req.headers.get('Content-Type') ?? '';
+    if (contentType.startsWith('multipart/form-data')) {
+      // Forward raw bytes + the original Content-Type (includes the boundary param).
+      // Converting to UTF-8 string would corrupt binary file data.
+      body = await req.arrayBuffer();
+      headers['Content-Type'] = contentType;
+    } else {
+      try {
+        const buf = await req.arrayBuffer();
+        const text = Buffer.from(buf).toString('utf8');
+        if (text) {
+          body = text;
+          headers['Content-Type'] = 'application/json';
+        }
+      } catch {
+        body = undefined;
+      }
+    }
   }
 
   const upstream = await fetch(url, {
