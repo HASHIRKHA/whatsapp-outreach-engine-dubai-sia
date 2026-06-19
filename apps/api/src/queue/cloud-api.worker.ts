@@ -71,6 +71,8 @@ export class CloudApiWorker extends WorkerHost {
     if (!session || session.status !== SessionStatus.ONLINE) {
       this.log.warn(`[CLOUD_API] session ${job.data.sessionId} not ONLINE — failing job`);
       await this.markFailed(job.data.campaignMessageId);
+      await this.emitStats(job.data.campaignId);
+      await this.checkCampaignDone(job.data.campaignId);
       return;
     }
     const cap = this.warmup.getEffectiveDailyLimit(session);
@@ -113,6 +115,8 @@ export class CloudApiWorker extends WorkerHost {
       if (!job.data.templateName) {
         this.log.error(`[CLOUD_API] job ${job.id} has no templateName — failing (Cloud API requires an approved template)`);
         await this.markFailed(job.data.campaignMessageId);
+        await this.emitStats(job.data.campaignId);
+        await this.checkCampaignDone(job.data.campaignId);
         return;
       }
       const result = await this.cloudApi.sendTemplate({

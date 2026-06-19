@@ -116,7 +116,13 @@ export class SessionsService implements OnModuleInit, OnModuleDestroy {
     if (sock) {
       this.intentionalDisconnects.add(id);
       this.sockets.delete(id);
+      this.reconnectDelays.delete(id);
+      this.startingSocket.delete(id);
       void sock.logout().catch(() => undefined);
+    } else {
+      // Socket may never have been started; still clear any pending reconnect state
+      this.reconnectDelays.delete(id);
+      this.startingSocket.delete(id);
     }
     // Layer 4: release proxy before removing the session record
     await this.proxy.releaseProxy(id);
@@ -351,7 +357,7 @@ export class SessionsService implements OnModuleInit, OnModuleDestroy {
     const OPT_OUT_KEYWORDS = new Set(['stop', 'unsubscribe', 'optout']);
     // Multi-word phrases are unambiguous enough to match anywhere in the message
     const OPT_OUT_PHRASES = ['remove me', 'opt out', "don't message", 'dont message', 'stop messaging', 'no more messages'];
-    const cleanedText = lowerText.trim().replace(/[.,!?;:]+$/, '');
+    const cleanedText = lowerText.trim().replace(/^[.,!?;:]+/, '').replace(/[.,!?;:]+$/, '');
     const isOptOut =
       OPT_OUT_KEYWORDS.has(cleanedText) ||
       OPT_OUT_PHRASES.some((p) => lowerText.includes(p));

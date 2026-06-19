@@ -88,6 +88,8 @@ model Contact {
   smartLists SmartListContact[]
 
   @@unique([phone])
+  @@index([leadTemp])
+  @@index([valid])
 }
 
 model SmartList {
@@ -111,12 +113,13 @@ model SmartListContact {
 }
 
 model Template {
-  id        String   @id @default(cuid())
+  id        String     @id @default(cuid())
   name      String
   body      String // spin syntax: {Hi|Hello} {name}
   mediaUrl  String?
   category  String? // marketing | utility | auth | service
-  createdAt DateTime @default(now())
+  createdAt DateTime   @default(now())
+  campaigns Campaign[]
 }
 
 model Campaign {
@@ -124,6 +127,7 @@ model Campaign {
   name          String
   mode          SessionMode
   templateId    String?
+  template      Template?      @relation(fields: [templateId], references: [id], onDelete: SetNull)
   status        CampaignStatus @default(DRAFT)
   activeFrom    Int            @default(8) // active-hours window (local)
   activeTo      Int            @default(22)
@@ -134,6 +138,9 @@ model Campaign {
   createdAt     DateTime       @default(now())
   messages      CampaignMessage[]
   replies       Reply[]
+
+  @@index([status])
+  @@index([createdAt])
 }
 
 model CampaignMessage {
@@ -145,7 +152,7 @@ model CampaignMessage {
   renderedText String // final spun + personalized text
   status       MsgStatus @default(QUEUED)
   sentAt       DateTime?
-  campaign     Campaign  @relation(fields: [campaignId], references: [id])
+  campaign     Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   contact      Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
   session      Session?  @relation(fields: [sessionId], references: [id], onDelete: SetNull)
 

@@ -1,4 +1,4 @@
-import { Inject, Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { MsgStatus, SessionMode, SessionStatus } from '@prisma/client';
 import { spinText } from '@wa-engine/shared';
 import { PrismaService } from '../common/prisma/prisma.service';
@@ -62,6 +62,10 @@ export class AiService {
   // ── generate-campaign ─────────────────────────────────────────────────────
 
   async generateCampaign(dto: GenerateCampaignDto): Promise<GenerateCampaignResult> {
+    if (dto.campaignId) {
+      const exists = await this.prisma.campaign.findUnique({ where: { id: dto.campaignId }, select: { id: true } });
+      if (!exists) throw new BadRequestException(`Campaign ${dto.campaignId} not found`);
+    }
     const templates = await this.callGenerateTemplates(dto);
 
     const messages = dto.contacts.map((contact, idx) => {
@@ -195,6 +199,7 @@ export class AiService {
           status: MsgStatus.QUEUED,
         },
       });
+      alreadyQueued.add(msg.contactId); // prevent duplicate if contacts array contains same contactId twice
 
       const prevDelay = sessionDelays.get(session.id) ?? 0;
       const contactMultiplier = previouslySentToIds.has(msg.contactId) ? 1.0 : 2.5;

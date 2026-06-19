@@ -151,7 +151,7 @@ export class WebhooksService {
     const OPT_OUT_KEYWORDS = new Set(['stop', 'unsubscribe', 'optout']);
     // Multi-word phrases are unambiguous enough to match anywhere in the message
     const OPT_OUT_PHRASES = ['remove me', 'opt out', "don't message", 'dont message', 'stop messaging', 'no more messages'];
-    const cleanedBody = lowerBody.trim().replace(/[.,!?;:]+$/, '');
+    const cleanedBody = lowerBody.trim().replace(/^[.,!?;:]+/, '').replace(/[.,!?;:]+$/, '');
     const isOptOut =
       OPT_OUT_KEYWORDS.has(cleanedBody) ||
       OPT_OUT_PHRASES.some((p) => lowerBody.includes(p));

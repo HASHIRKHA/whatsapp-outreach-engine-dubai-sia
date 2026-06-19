@@ -33,6 +33,19 @@ export interface CampaignStats {
   failed: number;
 }
 
+export interface CampaignMessageRow {
+  id: string;
+  campaignId: string;
+  contactId: string;
+  sessionId: string | null;
+  wamid: string | null;
+  renderedText: string;
+  status: string;
+  sentAt: Date | null;
+  phone: string | null;
+  contactName: string | null;
+}
+
 @Injectable()
 export class CampaignsService {
   private readonly log = new Logger(CampaignsService.name);
@@ -70,6 +83,11 @@ export class CampaignsService {
   }
 
   async delete(id: string): Promise<void> {
+    const campaign = await this.prisma.campaign.findUnique({ where: { id }, select: { status: true } });
+    if (!campaign) throw new NotFoundException(`Campaign ${id} not found`);
+    if (campaign.status === CampaignStatus.RUNNING) {
+      throw new BadRequestException('Pause the campaign before deleting it');
+    }
     await this.prisma.campaignMessage.deleteMany({ where: { campaignId: id } });
     await this.prisma.campaign.delete({ where: { id } }).catch(mapP2025(id, 'Campaign'));
   }
@@ -153,10 +171,14 @@ export class CampaignsService {
     }
 
     if (campaign.status !== CampaignStatus.RUNNING) {
-      await this.prisma.campaign.update({
-        where: { id },
+      // Use updateMany so a concurrent launch request sees count=0 and skips the duplicate work
+      const updated = await this.prisma.campaign.updateMany({
+        where: { id, status: { not: CampaignStatus.RUNNING } },
         data: { status: CampaignStatus.RUNNING },
       });
+      if (updated.count === 0) {
+        this.log.warn(`Campaign ${id} already set to RUNNING by concurrent request — proceeding with dedup`);
+      }
     }
 
     // Skip contacts that already have a non-failed message in this campaign (dedup)
@@ -277,7 +299,7 @@ export class CampaignsService {
     this.log.log(`Campaign ${id} resumed`);
   }
 
-  async getMessages(id: string, take: number): Promise<unknown[]> {
+  async getMessages(id: string, take: number): Promise<CampaignMessageRow[]> {
     await this.prisma.campaign.findUniqueOrThrow({ where: { id } }).catch(mapP2025(id, 'Campaign'));
     const safeTake = Math.min(isNaN(take) ? 20 : take, 200);
     const rows = await this.prisma.campaignMessage.findMany({

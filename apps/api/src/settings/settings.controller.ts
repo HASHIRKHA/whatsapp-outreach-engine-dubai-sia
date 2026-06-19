@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -12,10 +13,10 @@ import {
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, Min, IsBoolean } from 'class-validator';
+import { CampaignStatus, type Proxy } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { SettingsService, type EngineSettings, type AiSettings } from './settings.service';
 import { BAILEYS_QUEUE, CLOUD_API_QUEUE, DLQ_QUEUE } from '../queue/queue.constants';
-import type { Proxy } from '@prisma/client';
 
 class CreateProxyDto {
   @IsString()
@@ -48,7 +49,7 @@ class CreateProxyDto {
 class PatchEngineDto {
   @IsOptional()
   @IsInt()
-  @Min(0)
+  @Min(1000)
   meanMs?: number;
 
   @IsOptional()
@@ -58,12 +59,12 @@ class PatchEngineDto {
 
   @IsOptional()
   @IsInt()
-  @Min(0)
+  @Min(1000)
   floorMs?: number;
 
   @IsOptional()
   @IsInt()
-  @Min(0)
+  @Min(1000)
   ceilingMs?: number;
 
   @IsOptional()
@@ -84,6 +85,7 @@ class PatchEngineDto {
 class PatchAiDto {
   @IsOptional()
   @IsString()
+  @IsIn(['anthropic', 'openai'])
   provider?: string;
 
   @IsOptional()
@@ -179,6 +181,12 @@ export class SettingsController {
   @Post('queue/purge')
   @HttpCode(200)
   async purgeQueues(): Promise<{ purged: boolean; message: string }> {
+    const running = await this.prisma.campaign.count({ where: { status: CampaignStatus.RUNNING } });
+    if (running > 0) {
+      throw new BadRequestException(
+        `Pause all running campaigns before purging queues (${running} campaign${running > 1 ? 's' : ''} still running)`,
+      );
+    }
     await Promise.all([
       this.baileysQ.obliterate({ force: true }),
       this.cloudApiQ.obliterate({ force: true }),
@@ -210,15 +218,17 @@ export class SettingsController {
   @Delete('proxies/:id')
   @HttpCode(204)
   async deleteProxy(@Param('id') id: string): Promise<void> {
-    await this.prisma.session.updateMany({
-      where: { proxyId: id },
-      data: { proxyId: null },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.session.updateMany({
+        where: { proxyId: id },
+        data: { proxyId: null },
+      });
+      try {
+        await tx.proxy.delete({ where: { id } });
+      } catch (e) {
+        if ((e as { code?: string }).code === 'P2025') throw new NotFoundException(`Proxy ${id} not found`);
+        throw e;
+      }
     });
-    try {
-      await this.prisma.proxy.delete({ where: { id } });
-    } catch (e) {
-      if ((e as { code?: string }).code === 'P2025') throw new NotFoundException(`Proxy ${id} not found`);
-      throw e;
-    }
   }
 }

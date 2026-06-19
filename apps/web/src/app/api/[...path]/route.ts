@@ -30,7 +30,7 @@ async function proxy(req: NextRequest, { params }: { params: Promise<{ path: str
       try {
         const buf = await req.arrayBuffer();
         const text = Buffer.from(buf).toString('utf8');
-        if (text) {
+        if (text !== undefined) {
           body = text;
           headers['Content-Type'] = 'application/json';
         }

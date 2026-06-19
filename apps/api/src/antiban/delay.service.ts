@@ -50,11 +50,22 @@ export class DelayService {
 
   msUntilMidnight(): number {
     const now = new Date();
-    const midnight = new Date(now);
-    midnight.setDate(midnight.getDate() + 1);
-    midnight.setHours(0, 0, 0, 0);
-    // Clamp to at least 60 s so the job isn't immediately re-picked
-    return Math.max(midnight.getTime() - now.getTime(), 60_000);
+    // Use the same TZ as active-hours so the daily-cap reset aligns with ACTIVE_HOURS_TIMEZONE midnight
+    const dtf = new Intl.DateTimeFormat('en-US', {
+      hour: 'numeric',
+      minute: 'numeric',
+      hour12: false,
+      timeZone: this.activeHoursTimezone,
+    });
+    const parts = dtf.formatToParts(now);
+    const tzHour = (() => {
+      const h = parseInt(parts.find((p) => p.type === 'hour')?.value ?? '0', 10);
+      return h === 24 ? 0 : h;
+    })();
+    const tzMinute = parseInt(parts.find((p) => p.type === 'minute')?.value ?? '0', 10);
+    // Minutes remaining until next midnight in the configured TZ
+    const minutesUntilMidnight = (24 - tzHour) * 60 - tzMinute;
+    return Math.max(minutesUntilMidnight * 60 * 1000, 60_000);
   }
 
   msUntilNextWindow(activeFrom: number): number {

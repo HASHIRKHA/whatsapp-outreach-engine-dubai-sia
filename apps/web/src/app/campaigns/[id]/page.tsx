@@ -326,7 +326,7 @@ function CampaignDetailContent() {
   };
 
   const handleAiOptimize = async () => {
-    const topVariant = analytics?.variants?.sort((a, b) => b.rate - a.rate)[0];
+    const topVariant = analytics?.variants?.slice().sort((a, b) => b.rate - a.rate)[0];
     const brief = topVariant
       ? `Improve this WhatsApp message for better reply rates: "${topVariant.text}"`
       : 'Generate high-converting WhatsApp outreach messages';
@@ -489,7 +489,7 @@ function CampaignDetailContent() {
                 </tr>
               </thead>
               <tbody>
-                {messages.slice(0, 15).map((m) => (
+                {messages.slice(0, 20).map((m) => (
                   <tr key={m.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                     <td style={{ padding: '9px 12px 9px 0', fontWeight: 500, color: 'var(--text-primary)', fontSize: 11 }}>{m.phone ?? m.contactId.slice(0, 8) + '…'}</td>
                     <td style={{ padding: '9px 12px 9px 0', color: 'var(--text-muted)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { MsgStatus, SessionStatus } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 
@@ -169,6 +169,9 @@ export class AnalyticsService {
   }
 
   async getCampaignOverview(campaignId: string): Promise<CampaignOverviewResponse> {
+    const exists = await this.prisma.campaign.findUnique({ where: { id: campaignId }, select: { id: true } });
+    if (!exists) throw new NotFoundException(`Campaign ${campaignId} not found`);
+
     const rows = await this.prisma.campaignMessage.groupBy({
       by: ['status'],
       where: { campaignId },
@@ -188,7 +191,7 @@ export class AnalyticsService {
 
     const variantMap = new Map<string, { sent: number; replied: number }>();
     for (const m of allMessages) {
-      const key = m.renderedText.slice(0, 80);
+      const key = m.renderedText;
       const entry = variantMap.get(key) ?? { sent: 0, replied: 0 };
       if (m.status !== MsgStatus.QUEUED && m.status !== MsgStatus.FAILED) entry.sent++;
       if (m.status === MsgStatus.REPLIED) entry.replied++;
@@ -237,7 +240,7 @@ export class AnalyticsService {
     const now = new Date();
     const buckets: DailyBucket[] = [];
     for (let i = days - 1; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+      const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - i));
       const dateStr = d.toISOString().slice(0, 10);
       buckets.push({ date: dateStr, count: map.get(dateStr) ?? 0 });
     }
@@ -263,7 +266,7 @@ export class AnalyticsService {
     const now = new Date();
     const buckets: DailyBucket[] = [];
     for (let i = days - 1; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+      const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - i));
       const dateStr = d.toISOString().slice(0, 10);
       buckets.push({ date: dateStr, count: map.get(dateStr) ?? 0 });
     }

@@ -64,9 +64,12 @@ function makeCampaign(status: CampaignStatus = CampaignStatus.DRAFT) {
 const mockPrisma = {
   campaign: {
     findUniqueOrThrow: jest.fn(),
+    findUnique: jest.fn(),
     create: jest.fn(),
     update: jest.fn(),
+    updateMany: jest.fn(),
     findMany: jest.fn(),
+    count: jest.fn(),
   },
   template: { findUnique: jest.fn().mockResolvedValue(makeTemplate()) },
   contact: { findMany: jest.fn() },
@@ -112,10 +115,11 @@ describe('CampaignsService', () => {
     jest.clearAllMocks();
     mockWarmup.getEffectiveDailyLimit.mockReturnValue(200);
 
-    // Default campaign update to return the updated campaign
+    // Default campaign update/updateMany to succeed
     mockPrisma.campaign.update.mockImplementation(({ data }: { data: Record<string, unknown> }) =>
       Promise.resolve({ ...makeCampaign(), ...data }),
     );
+    mockPrisma.campaign.updateMany.mockResolvedValue({ count: 1 });
 
     // Default message create
     mockPrisma.campaignMessage.create.mockImplementation(
@@ -330,8 +334,8 @@ describe('CampaignsService', () => {
 
       await service.launch('camp-1', { contactIds: contacts.map((c) => c.id) });
 
-      expect(mockPrisma.campaign.update).toHaveBeenCalledWith({
-        where: { id: 'camp-1' },
+      expect(mockPrisma.campaign.updateMany).toHaveBeenCalledWith({
+        where: { id: 'camp-1', status: { not: CampaignStatus.RUNNING } },
         data: { status: CampaignStatus.RUNNING },
       });
       expect(mockProducer.enqueue).toHaveBeenCalledTimes(1);
