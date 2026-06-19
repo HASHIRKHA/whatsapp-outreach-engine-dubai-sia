@@ -2,6 +2,8 @@ import { type NextRequest, NextResponse } from 'next/server';
 
 // Remove Next.js body size cap on this catch-all proxy route
 export const dynamic = 'force-dynamic';
+// Allow up to 60s for AI generation and campaign launch calls (Vercel Pro limit)
+export const maxDuration = 60;
 
 const API_URL = process.env.API_URL ?? 'http://localhost:3001/api';
 
