@@ -6,10 +6,13 @@ export async function apiFetch<T = unknown>(
   const method = options?.method?.toUpperCase() ?? 'GET';
   const needsBody = ['POST', 'PUT', 'PATCH'].includes(method);
   const body = options?.body ?? (needsBody ? '{}' : undefined);
+  // FormData must NOT get a manual Content-Type — fetch sets its own multipart
+  // boundary only when the header is left unset.
+  const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
 
   const res = await fetch(`/api${path}`, {
     headers: {
-      ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+      ...(body !== undefined && !isFormData ? { 'Content-Type': 'application/json' } : {}),
       ...(options?.headers ?? {}),
     },
     ...options,

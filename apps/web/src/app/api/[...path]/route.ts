@@ -55,8 +55,9 @@ async function proxy(req: NextRequest, { params }: { params: Promise<{ path: str
     return new NextResponse(null, { status: 204, headers: responseHeaders });
   }
 
-  const text = await upstream.text();
-  return new NextResponse(text, {
+  // arrayBuffer (not .text()) — response may be a binary media file, not just JSON.
+  const buf = await upstream.arrayBuffer();
+  return new NextResponse(buf, {
     status: upstream.status,
     headers: responseHeaders,
   });

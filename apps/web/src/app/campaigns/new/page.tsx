@@ -131,7 +131,6 @@ function NewCampaignContent() {
       const res = await fetch('/api/media/upload', {
         method: 'POST',
         body: form,
-        headers: process.env.NEXT_PUBLIC_API_KEY ? { 'X-API-Key': process.env.NEXT_PUBLIC_API_KEY } : {},
       });
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json() as { url: string; type: string; mimeType: string; filename: string };

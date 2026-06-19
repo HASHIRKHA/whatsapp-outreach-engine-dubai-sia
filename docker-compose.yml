@@ -35,6 +35,10 @@ services:
       REDIS_URL: "redis://:${REDIS_PASSWORD:-changeme_in_production}@redis:6379"
       NODE_ENV: production
       PORT: '3001'
+    volumes:
+      # Persists media uploads across container restarts/redeploys — matches
+      # UPLOAD_DIR default ('uploads', resolved relative to the container's cwd).
+      - uploads_data:/app/apps/api/uploads
     networks:
       - internal
     depends_on:
@@ -92,3 +96,4 @@ services:
 
 volumes:
   redis_data:
+  uploads_data:

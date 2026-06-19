@@ -1,7 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
-import { CampaignStatus, MsgStatus, SessionMode, SessionStatus } from '@prisma/client';
+import { CampaignStatus, MediaType, MsgStatus, SessionMode, SessionStatus } from '@prisma/client';
 import { CampaignsService } from './campaigns.service';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { DelayService } from '../antiban/delay.service';
@@ -139,6 +139,47 @@ describe('CampaignsService', () => {
     }).compile();
 
     service = module.get(CampaignsService);
+  });
+
+  // ── create ───────────────────────────────────────────────────────────────────
+
+  describe('create', () => {
+    it('persists media attachment fields when provided', async () => {
+      mockPrisma.campaign.create.mockResolvedValue(makeCampaign());
+
+      await service.create({
+        name: 'Promo',
+        mode: SessionMode.BAILEYS,
+        mediaUrl: 'http://localhost:3001/api/media/a.jpg',
+        mediaType: MediaType.IMAGE,
+        mediaMimeType: 'image/jpeg',
+        mediaFilename: 'a.jpg',
+      });
+
+      expect(mockPrisma.campaign.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          mediaUrl: 'http://localhost:3001/api/media/a.jpg',
+          mediaType: MediaType.IMAGE,
+          mediaMimeType: 'image/jpeg',
+          mediaFilename: 'a.jpg',
+        }),
+      });
+    });
+
+    it('passes media fields through as undefined when no attachment is given', async () => {
+      mockPrisma.campaign.create.mockResolvedValue(makeCampaign());
+
+      await service.create({ name: 'No Attachment', mode: SessionMode.BAILEYS });
+
+      expect(mockPrisma.campaign.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          mediaUrl: undefined,
+          mediaType: undefined,
+          mediaMimeType: undefined,
+          mediaFilename: undefined,
+        }),
+      });
+    });
   });
 
   // ── round-robin routing ────────────────────────────────────────────────────
@@ -294,6 +335,62 @@ describe('CampaignsService', () => {
         data: { status: CampaignStatus.RUNNING },
       });
       expect(mockProducer.enqueue).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ── media attachment threading ────────────────────────────────────────────
+
+  describe('media attachment threading into enqueued jobs', () => {
+    it('threads campaign media fields into every OutboxJob when an attachment is set', async () => {
+      const sessions = [makeSession('s1')];
+      const contacts = ['c1', 'c2'].map(makeContact);
+
+      mockPrisma.campaign.findUniqueOrThrow.mockResolvedValue({
+        ...makeCampaign(),
+        mediaUrl: 'http://localhost:3001/api/media/a.jpg',
+        mediaType: MediaType.IMAGE,
+        mediaMimeType: 'image/jpeg',
+        mediaFilename: 'a.jpg',
+      });
+      mockPrisma.contact.findMany.mockResolvedValue(contacts);
+      mockPrisma.session.findMany.mockResolvedValue(sessions);
+
+      await service.launch('camp-1', { contactIds: contacts.map((c) => c.id) });
+
+      const jobs = (mockProducer.enqueue.mock.calls as Array<[Record<string, unknown>, unknown]>).map(
+        ([job]) => job,
+      );
+      for (const job of jobs) {
+        expect(job['mediaUrl']).toBe('http://localhost:3001/api/media/a.jpg');
+        expect(job['mediaType']).toBe(MediaType.IMAGE);
+        expect(job['mediaMimeType']).toBe('image/jpeg');
+        expect(job['mediaFilename']).toBe('a.jpg');
+      }
+    });
+
+    it('passes media fields as undefined (not null) when the campaign has no attachment', async () => {
+      const sessions = [makeSession('s1')];
+      const contacts = ['c1'].map(makeContact);
+
+      // makeCampaign() has no media fields, mirroring a real Campaign row with null columns —
+      // service code uses `campaign.mediaUrl ?? undefined` etc. at the enqueue call site.
+      mockPrisma.campaign.findUniqueOrThrow.mockResolvedValue({
+        ...makeCampaign(),
+        mediaUrl: null,
+        mediaType: null,
+        mediaMimeType: null,
+        mediaFilename: null,
+      });
+      mockPrisma.contact.findMany.mockResolvedValue(contacts);
+      mockPrisma.session.findMany.mockResolvedValue(sessions);
+
+      await service.launch('camp-1', { contactIds: ['c1'] });
+
+      const [job] = mockProducer.enqueue.mock.calls[0] as [Record<string, unknown>, unknown];
+      expect(job['mediaUrl']).toBeUndefined();
+      expect(job['mediaType']).toBeUndefined();
+      expect(job['mediaMimeType']).toBeUndefined();
+      expect(job['mediaFilename']).toBeUndefined();
     });
   });
 
