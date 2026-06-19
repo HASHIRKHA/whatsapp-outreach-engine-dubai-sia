@@ -18,7 +18,8 @@ RUN corepack enable
 WORKDIR /app
 COPY --from=deps /app .
 
-# Copy source
+# Copy source (root tsconfig needed by packages/shared which extends it)
+COPY tsconfig.json ./
 COPY packages/shared ./packages/shared
 COPY apps/api ./apps/api
 
