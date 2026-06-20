@@ -1,0 +1,31 @@
+name: Deploy API to Railway
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Link Railway project
+        run: |
+          mkdir -p .railway
+          echo '{"projectId":"b9e5c56f-dae9-4b8b-a21f-cb2156f23f48","environmentName":"production","serviceId":"14071e13-7105-49b2-8760-92a81c4479c5"}' > .railway/config.json
+
+      - name: Deploy to Railway
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --detach
